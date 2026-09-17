@@ -143,16 +143,30 @@ app.Run();
 
 static void EnsureColumn(DataContext db, string table, string columnDefinitionSql)
 {
-    try
+    var columnName = columnDefinitionSql.Split(' ')[0];
+
+    var connection = db.Database.GetDbConnection();
+    if (connection.State != System.Data.ConnectionState.Open)
     {
-        // table/columnDefinitionSql are always hardcoded literals from our own call sites above,
-        // never user input - DDL identifiers can't be parameterized, so this is not injectable.
+        connection.Open();
+    }
+
+    using (var checkCommand = connection.CreateCommand())
+    {
+        checkCommand.CommandText = $"PRAGMA table_info({table})";
+        using var reader = checkCommand.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return; // column already present from a prior run (or from a fresh EnsureCreated() that already includes it) - nothing to do
+            }
+        }
+    }
+
+    // table/columnDefinitionSql are always hardcoded literals from our own call sites above,
+    // never user input - DDL identifiers can't be parameterized, so this is not injectable.
 #pragma warning disable EF1002
-        db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {columnDefinitionSql}");
+    db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {columnDefinitionSql}");
 #pragma warning restore EF1002
-    }
-    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
-    {
-        // column already present from a prior run - fine
-    }
 }
