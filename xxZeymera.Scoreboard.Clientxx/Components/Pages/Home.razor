@@ -1,0 +1,334 @@
+@page "/"
+@implements IAsyncDisposable
+@inject LocalizationService L
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject HttpClient Http
+@using Zeymera.Scoreboard.Client.Services
+
+<div class="board" tabindex="0" @onkeydown="HandleKeyDown" @onclick="RequestFullscreenAsync">
+
+    <header class="board-header">
+        <div class="header-icon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none">
+                <path d="M26 38 L4 60" stroke="#d8d0c4" stroke-width="3" stroke-linecap="round" />
+                <path d="M22 42 L31 33" stroke="#8a6a3a" stroke-width="6" stroke-linecap="round" />
+                <circle cx="44" cy="16" r="8" fill="#f4c430" />
+                <ellipse cx="41.3" cy="12.8" rx="2.3" ry="1.5" fill="#fff" opacity="0.55" />
+                <circle cx="32" cy="32" r="8" fill="#f2f2f2" />
+                <ellipse cx="29.3" cy="28.8" rx="2.3" ry="1.5" fill="#fff" opacity="0.6" />
+                <circle cx="54" cy="32" r="8" fill="#c9202c" />
+                <ellipse cx="51.3" cy="28.8" rx="2.3" ry="1.5" fill="#fff" opacity="0.55" />
+            </svg>
+        </div>
+
+        <h1 class="title">@L.T("Title")</h1>
+
+        <div class="header-status">
+            <div class="balls" aria-hidden="true">
+                <span class="ball yellow"></span>
+                <span class="ball white"></span>
+                <span class="ball red"></span>
+            </div>
+            <span class="shot-clock-countdown @(Sync.Current.ShotClockActive && Sync.Current.ShotClockRemaining <= 10 ? "urgent" : "")">@ShotClockDisplaySeconds</span>
+        </div>
+    </header>
+
+    <main class="scores">
+        <section class="player-panel @(Sync.Current.ActivePlayer == 1 ? "active-white" : "")">
+            <div class="player-name-bar">
+                @if (Sync.Current.ActivePlayer == 1)
+                {
+                    <span class="ball white turn-ball" aria-hidden="true"></span>
+                }
+                <span>@(string.IsNullOrWhiteSpace(Sync.Current.Player1Name) ? L.T("Player1Default") : Sync.Current.Player1Name)</span>
+            </div>
+            <div class="player-score">@Sync.Current.Player1Score</div>
+        </section>
+
+        <section class="center-panel">
+            <div class="center-row">
+                <span class="center-label">@L.T("Inning")</span>
+                <span class="center-value inning">@Sync.Current.Inning</span>
+            </div>
+            <div class="center-divider"></div>
+            <div class="center-row">
+                <span class="center-label">@L.T("Match")</span>
+                <span class="center-value">@Sync.Current.MatchTarget</span>
+            </div>
+        </section>
+
+        <section class="player-panel @(Sync.Current.ActivePlayer == 2 ? "active-yellow" : "")">
+            <div class="player-name-bar">
+                @if (Sync.Current.ActivePlayer == 2)
+                {
+                    <span class="ball yellow turn-ball" aria-hidden="true"></span>
+                }
+                <span>@(string.IsNullOrWhiteSpace(Sync.Current.Player2Name) ? L.T("Player2Default") : Sync.Current.Player2Name)</span>
+            </div>
+            <div class="player-score yellow">@Sync.Current.Player2Score</div>
+        </section>
+    </main>
+
+    <footer class="stat-bar">
+        <div class="stat">
+            <span class="stat-label">@L.T("Avg")</span>
+            <span class="stat-value">@Sync.Current.Player1Avg.ToString("0.000")</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">@L.T("HighRun")</span>
+            <span class="stat-value">@Sync.Current.Player1HighRun</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">@L.T("CurrentPoints")</span>
+            <span class="stat-value current">@Sync.Current.CurrentPoints</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">@L.T("BestAvg")</span>
+            <span class="stat-value">@Sync.Current.Player2Avg.ToString("0.000")</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">@L.T("HighRun")</span>
+            <span class="stat-value">@Sync.Current.Player2HighRun</span>
+        </div>
+    </footer>
+
+    <div class="shot-clock @(Sync.Current.ShotClockActive ? "active" : "") @(Sync.Current.ShotClockActive && Sync.Current.ShotClockRemaining <= 10 ? "urgent" : "")">
+        <div class="shot-clock-bar" style="width:@ShotClockPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+    </div>
+
+    <div class="sync-dot @(Sync.IsOnline ? "online" : "offline")" title="@(Sync.IsOnline ? "Synced with server" : "Offline - saved locally")"></div>
+
+    <div class="brand-mark" aria-hidden="true">ZEYMERA</div>
+
+    @if (_showControls)
+    {
+        <div class="controls-overlay" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            <div class="control-group">
+                <span>@L.T("Player1Label")</span>
+                <input type="text" value="@Sync.Current.Player1Name" placeholder="@L.T("Player1Default")"
+                       @onchange="e => SetPlayerName(1, e.Value?.ToString())" />
+                @if (_players.Count > 0)
+                {
+                    <select @onchange="e => SelectPlayer(1, e.Value?.ToString())">
+                        <option value="">@L.T("ChoosePlayer")</option>
+                        @foreach (var p in _players)
+                        {
+                            <option value="@p.Code">@p.Name</option>
+                        }
+                    </select>
+                }
+            </div>
+            <div class="control-group">
+                <span>@L.T("Player2Label")</span>
+                <input type="text" value="@Sync.Current.Player2Name" placeholder="@L.T("Player2Default")"
+                       @onchange="e => SetPlayerName(2, e.Value?.ToString())" />
+                @if (_players.Count > 0)
+                {
+                    <select @onchange="e => SelectPlayer(2, e.Value?.ToString())">
+                        <option value="">@L.T("ChoosePlayer")</option>
+                        @foreach (var p in _players)
+                        {
+                            <option value="@p.Code">@p.Name</option>
+                        }
+                    </select>
+                }
+            </div>
+            <div class="control-group">
+                <span>@L.T("P1Score")</span>
+                <button @onclick="() => Adjust(s => s.Player1Score--)">-</button>
+                <button @onclick="() => Adjust(s => s.Player1Score++)">+</button>
+            </div>
+            <div class="control-group">
+                <span>@L.T("P2Score")</span>
+                <button @onclick="() => Adjust(s => s.Player2Score--)">-</button>
+                <button @onclick="() => Adjust(s => s.Player2Score++)">+</button>
+            </div>
+            <div class="control-group">
+                <span>@L.T("Inning")</span>
+                <button @onclick="() => Adjust(s => s.Inning--)">-</button>
+                <button @onclick="() => Adjust(s => s.Inning++)">+</button>
+            </div>
+            <div class="control-group">
+                <span>@L.T("CurrentPoints")</span>
+                <button @onclick="() => Adjust(s => s.CurrentPoints--)">-</button>
+                <button @onclick="() => Adjust(s => s.CurrentPoints++)">+</button>
+                <button @onclick="CommitCurrentPoints">@L.T("Add")</button>
+            </div>
+            <div class="control-group">
+                <span>@L.T("ActivePlayer")</span>
+                <button class="@(Sync.Current.ActivePlayer == 1 ? "active" : "")" @onclick="() => Sync.Mutate(s => s.ActivePlayer = 1)">@L.T("Player1Label")</button>
+                <button class="@(Sync.Current.ActivePlayer == 2 ? "active" : "")" @onclick="() => Sync.Mutate(s => s.ActivePlayer = 2)">@L.T("Player2Label")</button>
+            </div>
+            <div class="control-group">
+                <span>@L.T("ShotClock")</span>
+                @if (Sync.Current.ShotClockActive)
+                {
+                    <button @onclick="Sync.StopShotClock">@L.T("Stop")</button>
+                }
+                else
+                {
+                    <button @onclick="Sync.StartShotClock">@L.T("Start")</button>
+                }
+                <button @onclick="Sync.ResetShotClock">@L.T("Reset")</button>
+            </div>
+            <div class="control-group">
+                <span>Language</span>
+                <select value="@L.Language" @onchange="OnLanguageChanged">
+                    <option value="tr">TR</option>
+                    <option value="en">EN</option>
+                    <option value="nl">NL</option>
+                </select>
+            </div>
+            <p class="hint">@L.T("ControlsHint")</p>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _showControls;
+    private IJSObjectReference? _kiosk;
+
+    private List<PlayerOption> _players = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        L.SetLanguage(GetQueryParam(Nav.Uri, "lang"));
+        L.LanguageChanged += OnSyncStateChanged;
+
+        Sync.StateChanged += OnSyncStateChanged;
+        await Sync.StartAsync();
+        StateHasChanged();
+
+        _ = LoadPlayersAsync();
+    }
+    
+
+    private void SetPlayerName(int slot, string? name) => Sync.Mutate(s =>
+    {
+        if (slot == 1)
+        {
+            s.Player1Name = name ?? "";
+        }
+        else
+        {
+            s.Player2Name = name ?? "";
+        }
+    });
+
+    private void SelectPlayer(int slot, string? code)
+    {
+        var player = _players.FirstOrDefault(p => p.Code == code);
+        if (player is not null)
+        {
+            SetPlayerName(slot, player.Name);
+        }
+    }
+
+    private sealed record PlayerOption(string Code, string Name, int? TeamId, string? TeamName, DateTimeOffset CreatedAt);
+
+    private void OnSyncStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnLanguageChanged(ChangeEventArgs e) => L.SetLanguage(e.Value?.ToString());
+
+    private static string? GetQueryParam(string uri, string name)
+    {
+        var query = new Uri(uri).Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length == 2 && Uri.UnescapeDataString(parts[0]) == name)
+            {
+                return Uri.UnescapeDataString(parts[1]);
+            }
+        }
+
+        return null;
+    }
+
+    private void Adjust(Action<Zeymera.Scoreboard.Client.Models.ScoreboardState> mutate) => Sync.Mutate(mutate);
+
+    private double ShotClockPercent => Sync.Current.ShotClockSeconds > 0
+        ? Math.Clamp(Sync.Current.ShotClockRemaining / Sync.Current.ShotClockSeconds * 100, 0, 100)
+        : 0;
+
+    private int ShotClockDisplaySeconds => (int)Math.Ceiling(Sync.Current.ShotClockRemaining);
+
+    private void CommitCurrentPoints() => Sync.Mutate(s =>
+    {
+        var points = s.CurrentPoints;
+
+        if (s.ActivePlayer == 2)
+        {
+            s.Player2Score += points;
+            s.Player2HighRun = Math.Max(s.Player2HighRun, points);
+            s.ActivePlayer = 1;
+            s.Inning++; // both players have now taken their shot this round
+        }
+        else
+        {
+            s.Player1Score += points;
+            s.Player1HighRun = Math.Max(s.Player1HighRun, points);
+            s.ActivePlayer = 2;
+        }
+
+        s.Player1Avg = s.Inning > 0 ? (double)s.Player1Score / s.Inning : 0;
+        s.Player2Avg = s.Inning > 0 ? (double)s.Player2Score / s.Inning : 0;
+
+        s.CurrentPoints = 0;
+    });
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "c" or "C":
+                _showControls = !_showControls;
+                break;
+            case "t" or "T":
+                if (Sync.Current.ShotClockActive)
+                {
+                    Sync.StopShotClock();
+                }
+                else
+                {
+                    Sync.StartShotClock();
+                }
+                break;
+            case "r" or "R":
+                Sync.ResetShotClock();
+                break;
+            case "1":
+                Sync.Mutate(s => s.ActivePlayer = 1);
+                break;
+            case "2":
+                Sync.Mutate(s => s.ActivePlayer = 2);
+                break;
+            case "+" or "=":
+                Adjust(s => s.CurrentPoints++);
+                break;
+            case "-" or "_":
+                Adjust(s => s.CurrentPoints--);
+                break;
+            case "Enter":
+                CommitCurrentPoints();
+                break;
+        }
+    }
+
+    private async Task RequestFullscreenAsync()
+    {
+        _kiosk ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/kiosk.js");
+        await _kiosk.InvokeVoidAsync("requestFullscreen");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Sync.StateChanged -= OnSyncStateChanged;
+        L.LanguageChanged -= OnSyncStateChanged;
+        if (_kiosk is not null)
+        {
+            await _kiosk.DisposeAsync();
+        }
+    }
+}

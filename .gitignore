@@ -1,0 +1,24 @@
+## .NET
+bin/
+obj/
+*.user
+.vs/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+## SQLite runtime data
+*.db
+*.db-shm
+*.db-wal
+
+## Rider/VS Code
+.idea/
+.vscode/
+
+## OS
+.DS_Store
+Thumbs.db
