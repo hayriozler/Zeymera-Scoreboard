@@ -7,69 +7,73 @@
 @using Microsoft.AspNetCore.Components.Forms
 
 <div class="players-page">
-    <header class="players-header">
-        <h1>Players</h1>
-        <a class="back-link" href="/">&larr; Back to board</a>
-    </header>
+    <p><a href="/">&larr; Back to board</a></p>
+    <h1>Players</h1>
 
-    <EditForm Model="_form" OnValidSubmit="SavePlayerAsync" class="player-form">
-        <div class="field">
-            <label for="player-id">Id</label>
-            <InputNumber id="player-id" @bind-Value="_form.Id" />
-        </div>
-        <div class="field">
+    <EditForm Model="_form" OnValidSubmit="SavePlayerAsync">
+        <div>
             <label for="player-nickname">Nickname</label>
             <InputText id="player-nickname" @bind-Value="_form.Nickname" />
         </div>
-        <div class="field">
+        <div>
             <label for="player-name">Name</label>
             <InputText id="player-name" @bind-Value="_form.Name" />
         </div>
-        <div class="field">
+        <div>
             <label for="player-photo">Photo</label>
             <InputFile id="player-photo" OnChange="OnPhotoSelected" accept="image/*" />
         </div>
 
         @if (_errorMessage is not null)
         {
-            <p class="form-error">@_errorMessage</p>
+            <p style="color:red">@_errorMessage</p>
         }
 
-        <button type="submit" class="save-btn" disabled="@_isSaving">@(_isSaving ? "Saving..." : "Save Player")</button>
+        <button type="submit" disabled="@_isSaving">@(_isSaving ? "Saving..." : _form.Id == 0 ? "Add Player" : "Save Changes")</button>
+        @if (_form.Id != 0)
+        {
+            <button type="button" @onclick="CancelEdit">Cancel</button>
+        }
     </EditForm>
 
     <h2>Existing players</h2>
     @if (_players.Count == 0)
     {
-        <p class="empty-hint">No players yet.</p>
+        <p>No players yet.</p>
     }
     else
     {
-        <div class="player-grid">
-            @foreach (var p in _players)
-            {
-                <div class="player-card">
-                    @if (!string.IsNullOrEmpty(p.PhotoPath))
-                    {
-                        <img src="@p.PhotoPath" alt="@p.Nickname" />
-                    }
-                    else
-                    {
-                        <div class="photo-placeholder">?</div>
-                    }
-                    <div class="player-info">
-                        <span class="player-id">#@p.Id</span>
-                        <span class="player-nickname">@p.Nickname</span>
-                        @if (!string.IsNullOrEmpty(p.Name))
-                        {
-                            <span class="player-name">@p.Name</span>
-                        }
-                    </div>
-                    <button class="edit-btn" @onclick="() => EditPlayer(p)">Edit</button>
-                    <button class="delete-btn" @onclick="() => DeletePlayerAsync(p.Id)">Delete</button>
-                </div>
-            }
-        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Photo</th>
+                    <th>Id</th>
+                    <th>Nickname</th>
+                    <th>Name</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in _players)
+                {
+                    <tr>
+                        <td>
+                            @if (!string.IsNullOrEmpty(p.PhotoPath))
+                            {
+                                <img src="@p.PhotoPath" alt="" width="40" height="40" style="object-fit:cover;border-radius:50%" />
+                            }
+                        </td>
+                        <td>@p.Id</td>
+                        <td>@p.Nickname</td>
+                        <td>@p.Name</td>
+                        <td>
+                            <button @onclick="() => EditPlayer(p)">Edit</button>
+                            <button @onclick="() => DeletePlayerAsync(p.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
     }
 </div>
 
@@ -107,20 +111,34 @@
         _errorMessage = null;
     }
 
+    private void CancelEdit()
+    {
+        _form = new PlayerFormModel();
+        _selectedPhoto = null;
+        _errorMessage = null;
+    }
+
     private async Task SavePlayerAsync()
     {
         _errorMessage = null;
-
-        if (_form.Id <= 0)
-        {
-            _errorMessage = "Id must be a positive number.";
-            return;
-        }
-
         _isSaving = true;
         try
         {
-            string? photoPath = null;
+            Player player;
+            if (_form.Id == 0)
+            {
+                player = new Player { Nickname = _form.Nickname, Name = _form.Name };
+                DbContext.Players.Add(player);
+                await DbContext.SaveChangesAsync(); // assigns player.Id
+            }
+            else
+            {
+                player = await DbContext.Players.FirstOrDefaultAsync(p => p.Id == _form.Id)
+                    ?? throw new InvalidOperationException($"Player {_form.Id} no longer exists.");
+                player.Nickname = _form.Nickname;
+                player.Name = _form.Name;
+            }
+
             if (_selectedPhoto is not null)
             {
                 var extension = Path.GetExtension(_selectedPhoto.Name);
@@ -131,41 +149,24 @@
 
                 var playersFolder = Path.Combine(Env.WebRootPath, "Players");
                 Directory.CreateDirectory(playersFolder);
-                var fileName = $"{_form.Id}{extension}";
+                var fileName = $"{player.Id}{extension}";
                 var fullPath = Path.Combine(playersFolder, fileName);
 
                 await using var readStream = _selectedPhoto.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
                 await using var writeStream = File.Create(fullPath);
                 await readStream.CopyToAsync(writeStream);
 
-                photoPath = $"Players/{fileName}";
-            }
-
-            var existing = await DbContext.Players.FirstOrDefaultAsync(p => p.Id == _form.Id);
-            if (existing is null)
-            {
-                DbContext.Players.Add(new Player
-                {
-                    Id = _form.Id,
-                    Nickname = _form.Nickname,
-                    Name = _form.Name,
-                    PhotoPath = photoPath
-                });
-            }
-            else
-            {
-                existing.Nickname = _form.Nickname;
-                existing.Name = _form.Name;
-                if (photoPath is not null)
-                {
-                    existing.PhotoPath = photoPath;
-                }
+                player.PhotoPath = $"Players/{fileName}";
             }
 
             await DbContext.SaveChangesAsync();
             _form = new PlayerFormModel();
             _selectedPhoto = null;
             await LoadPlayersAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _errorMessage = ex.Message;
         }
         finally
         {

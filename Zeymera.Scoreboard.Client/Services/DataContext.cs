@@ -15,7 +15,7 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
         modelBuilder.Entity<ScoreboardState>().ToTable("scoreboard_state");
 
         modelBuilder.Entity<Player>().HasKey(p => p.Id);
-        modelBuilder.Entity<Player>().Property(p => p.Id).ValueGeneratedNever();
+        modelBuilder.Entity<Player>().Property(p => p.Id).UseAutoincrement();
         modelBuilder.Entity<Player>().ToTable("player");
     }
 }

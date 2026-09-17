@@ -356,6 +356,16 @@
     }
     private void SetPlayerName(int slot, string? name)
     {
+        if (int.TryParse(name, out var maybePlayerId))
+        {
+            var player = DbContext.Players.FirstOrDefault(p => p.Id == maybePlayerId);
+            if (player is not null)
+            {
+                SelectRosterPlayer(slot, player.Id);
+                return;
+            }
+        }
+
         if (slot == 1)
         {
             Current.Player1Name = name ?? "";
