@@ -47,6 +47,26 @@ using (var scope = app.Services.CreateScope())
     EnsureColumn(db, "player", "Name TEXT NOT NULL DEFAULT ''");
     EnsureColumn(db, "scoreboard_state", "Player1Id INTEGER NULL");
     EnsureColumn(db, "scoreboard_state", "Player2Id INTEGER NULL");
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS match_result (
+            Id INTEGER PRIMARY KEY,
+            PlayedAt TEXT NOT NULL,
+            Player1Id INTEGER NULL,
+            Player1Name TEXT NOT NULL DEFAULT '',
+            Player1Score INTEGER NOT NULL,
+            Player1Avg REAL NOT NULL,
+            Player1HighRun INTEGER NOT NULL,
+            Player2Id INTEGER NULL,
+            Player2Name TEXT NOT NULL DEFAULT '',
+            Player2Score INTEGER NOT NULL,
+            Player2Avg REAL NOT NULL,
+            Player2HighRun INTEGER NOT NULL,
+            Inning INTEGER NOT NULL,
+            MatchTarget INTEGER NOT NULL,
+            Winner INTEGER NOT NULL
+        );
+        """);
 }
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

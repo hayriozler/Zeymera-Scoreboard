@@ -43,7 +43,7 @@ The scoreboard accepts the same commands from three sources, all funneled throug
    {"command":"IncrementPoints"}
    {"command":"RenamePlayer1","payload":"Hayri"}
    ```
-   `command` is one of the `ScoreboardCommand` enum names (case-insensitive): `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `RenamePlayer1`, `RenamePlayer2`, `UpsertPlayer`. `payload` is optional: a plain string for the two rename commands, a structured object for `UpsertPlayer` (see below), and ignored by every other command. For backward compatibility the endpoint also still accepts a bare command name with no payload, e.g. just the text `IncrementPoints`.
+   `command` is one of the `ScoreboardCommand` enum names (case-insensitive): `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `RenamePlayer1`, `RenamePlayer2`, `UpsertPlayer`, `FinishMatch`. `payload` is optional: a plain string for the two rename commands, a structured object for `UpsertPlayer` (see below), and ignored by every other command. For backward compatibility the endpoint also still accepts a bare command name with no payload, e.g. just the text `IncrementPoints`.
 
    `UpsertPlayer` adds or updates a row in the local `player` roster (see "Player roster" below) — the photo is optional and only needs sending when it changes:
    ```json
@@ -62,11 +62,17 @@ The scoreboard accepts the same commands from three sources, all funneled throug
 
 ## Player roster
 
-The `player` table (SQLite, same database as the scoreboard state) is a local roster independent of `Zeymera.Scoreboard.Api` — `Id` is caller-assigned (not autoincrement), plus `Nickname`, `Name`, and `PhotoPath` (a relative path under `wwwroot/Players/`; the photo bytes live on disk, not in the DB).
+The `player` table (SQLite, same database as the scoreboard state) is a local roster independent of `Zeymera.Scoreboard.Api` — `Id` is auto-increment, plus `Nickname`, `Name`, and `PhotoPath` (a relative path under `wwwroot/Players/`; the photo bytes live on disk, not in the DB). The remote `UpsertPlayer` command may still pass an explicit `id` (e.g. to match a MAUI app's own id scheme) — EF/SQLite only auto-assign when the value is left at its default, so both paths work side by side.
 
 - **`/players`** — a page (linked from the board's controls overlay) to add/edit/delete roster players by hand, with a photo upload.
-- **Assigning a roster player to the board** — press `P` (or use the "Choose Player" button per slot in the controls overlay) to open a picker dialog listing the roster; picking one links that slot to the player's `Id` (`ScoreboardState.Player1Id`/`Player2Id`). Once linked, the board displays that player's `Nickname` (falling back to `Name` if the nickname is empty) and their photo next to the name, instead of the free-typed `Player1Name`/`Player2Name`. "Use manual name instead" in the dialog unlinks it and reverts to the free-text name.
+- **Assigning a roster player to the board** — press `P` (or use the "Choose Player" button per slot in the controls overlay) to open a picker dialog listing the roster; picking one links that slot to the player's `Id` (`ScoreboardState.Player1Id`/`Player2Id`). Once linked, the board displays that player's `Nickname` (falling back to `Name` if the nickname is empty) and their photo next to the name, instead of the free-typed `Player1Name`/`Player2Name`. "Use manual name instead" in the dialog unlinks it and reverts to the free-text name. Typing a number into the free-text name field is also treated as a lookup — if a roster player has that Id, that player is linked instead of using the digits as a literal name.
 - **`UpsertPlayer`** over WebSocket/Bluetooth (see above) adds/updates roster entries remotely — e.g. from the MAUI companion app.
+
+## Match history
+
+"Finish Match" in the controls overlay (confirms before proceeding) snapshots the current game into the `match_result` table and resets the board for a new match. Each row keeps: date/time played, both players' display names (a copy, not just a `PlayerId` reference — history stays readable even if that roster player is later renamed or deleted), scores, averages, high runs, innings played, the match target, and the winner. View it at **`/matches`**, linked from the controls overlay, with the winner's name highlighted.
+
+`FinishMatch` is also one of the `ScoreboardCommand`s, so it can be triggered remotely over WebSocket/Bluetooth as well as the on-screen button — remote triggers skip the local confirmation dialog (the calling app is expected to confirm on its own end).
 
 ## Known gaps
 

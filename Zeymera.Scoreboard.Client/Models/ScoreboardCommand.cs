@@ -13,4 +13,5 @@ public enum ScoreboardCommand
     RenamePlayer1,
     RenamePlayer2,
     UpsertPlayer,
+    FinishMatch,
 }

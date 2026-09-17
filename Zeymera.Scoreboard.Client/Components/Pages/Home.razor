@@ -191,6 +191,10 @@
             </div>
             <div class="control-group">
                 <a href="/players">Manage Players</a>
+                <a href="/matches">Match History</a>
+            </div>
+            <div class="control-group">
+                <button @onclick="ConfirmAndFinishMatchAsync">Finish Match</button>
             </div>
             <p class="hint">@L.T("ControlsHint")</p>
         </div>
@@ -444,6 +448,59 @@
         Persist();
     }
 
+    private async Task ConfirmAndFinishMatchAsync()
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Finish this match and start a new one? Current scores will be saved to history.");
+        if (confirmed)
+        {
+            FinishMatch();
+        }
+    }
+
+    private void FinishMatch()
+    {
+        var winner = Current.Player1Score > Current.Player2Score ? 1
+            : Current.Player2Score > Current.Player1Score ? 2
+            : 0;
+
+        DbContext.MatchResults.Add(new MatchResult
+        {
+            PlayedAt = DateTime.Now,
+            Player1Id = Current.Player1Id,
+            Player1Name = GetDisplayName(1),
+            Player1Score = Current.Player1Score,
+            Player1Avg = Current.Player1Avg,
+            Player1HighRun = Current.Player1HighRun,
+            Player2Id = Current.Player2Id,
+            Player2Name = GetDisplayName(2),
+            Player2Score = Current.Player2Score,
+            Player2Avg = Current.Player2Avg,
+            Player2HighRun = Current.Player2HighRun,
+            Inning = Current.Inning,
+            MatchTarget = Current.MatchTarget,
+            Winner = winner
+        });
+
+        Current.Player1Score = 0;
+        Current.Player2Score = 0;
+        Current.Player1Avg = 0;
+        Current.Player2Avg = 0;
+        Current.Player1HighRun = 0;
+        Current.Player2HighRun = 0;
+        Current.Inning = 0;
+        Current.CurrentPoints = 0;
+        Current.ActivePlayer = 1;
+        Current.Player1Id = null;
+        Current.Player2Id = null;
+        Current.Player1Name = "";
+        Current.Player2Name = "";
+        Current.ShotClockActive = false;
+        Current.ShotClockRemaining = Current.ShotClockSeconds;
+
+        ResolvePlayers();
+        Persist();
+    }
+
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key is "p" or "P")
@@ -510,6 +567,9 @@
                 break;
             case ScoreboardCommand.UpsertPlayer:
                 UpsertPlayerFromPayload(payload);
+                break;
+            case ScoreboardCommand.FinishMatch:
+                FinishMatch();
                 break;
         }
     }
