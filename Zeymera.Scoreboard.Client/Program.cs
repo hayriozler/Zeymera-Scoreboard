@@ -1,6 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using System.Net.WebSockets;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Zeymera.Scoreboard.Client.Components;
 using Zeymera.Scoreboard.Client.Models;
 using Zeymera.Scoreboard.Client.Services;
@@ -30,6 +32,12 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+var controlMessageJsonOptions = new JsonSerializerOptions
+{
+    PropertyNameCaseInsensitive = true,
+    Converters = { new JsonStringEnumConverter() }
+};
+
 app.UseWebSockets();
 app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
 {
@@ -54,9 +62,22 @@ app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
             }
 
             var text = Encoding.UTF8.GetString(buffer, 0, result.Count).Trim();
-            if (Enum.TryParse<ScoreboardCommand>(text, ignoreCase: true, out var command))
+            ScoreboardCommandMessage? message;
+            try
             {
-                hub.Publish(command);
+                message = JsonSerializer.Deserialize<ScoreboardCommandMessage>(text, controlMessageJsonOptions);
+            }
+            catch (JsonException)
+            {
+                // fall back to the old bare-command-name format, e.g. "IncrementPoints"
+                message = Enum.TryParse<ScoreboardCommand>(text, ignoreCase: true, out var bareCommand)
+                    ? new ScoreboardCommandMessage(bareCommand)
+                    : null;
+            }
+
+            if (message is not null)
+            {
+                hub.Publish(message.Command, message.Payload);
             }
         }
     }

@@ -37,17 +37,22 @@ Click anywhere on the board to enter fullscreen kiosk mode.
 The scoreboard accepts the same commands from three sources, all funneled through `Home.razor`'s `ApplyCommand`:
 
 1. **Keyboard**, as above.
-2. **WebSocket** — a control app can connect to `ws://<host>:<port>/ws/control` and send one of the `ScoreboardCommand` enum names as a plain UTF-8 text frame:
-   `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`.
+2. **WebSocket** — a control app connects to `ws://<host>:<port>/ws/control` and sends a JSON envelope as a UTF-8 text frame:
+   ```json
+   {"command":"IncrementPoints"}
+   {"command":"RenamePlayer1","payload":"Hayri"}
+   ```
+   `command` is one of the `ScoreboardCommand` enum names (case-insensitive): `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `RenamePlayer1`, `RenamePlayer2`. `payload` is optional and only used by the two rename commands (the new player name); every other command ignores it. For backward compatibility the endpoint also still accepts a bare command name with no payload, e.g. just the text `IncrementPoints`.
 
-   Quick test from a browser console on the scoreboard page:
+   Quick test from a browser console **on the scoreboard page itself** (a live circuit needs to be open for anything to receive the command — a bare `curl`/script connection with no rendered page won't do anything):
    ```js
    const ws = new WebSocket("ws://localhost:5288/ws/control");
    ws.onopen = () => console.log("connected");
+   ws.send(JSON.stringify({ command: "RenamePlayer1", payload: "Hayri" }));
    ws.send("IncrementPoints");
    ```
    The sync-dot on the board reflects whether a control connection is currently active.
-3. **Bluetooth (Web Bluetooth)** — "Pair remote" in the controls overlay connects to a BLE peripheral over `wwwroot/js/bluetooth.js`. This only works against a **custom** GATT service; browsers block the standard HID-over-GATT profile, so a generic BLE pedal/keyboard won't pair this way (pair it at the OS level instead — it'll fire keydown events, which are already wired up). The remote is expected to notify the same command names as the WebSocket channel, UTF-8 encoded. The service/characteristic UUIDs in `bluetooth.js` are placeholders (Nordic UART Service convention) — replace them with your device's actual UUIDs.
+3. **Bluetooth (Web Bluetooth)** — "Pair remote" in the controls overlay connects to a BLE peripheral over `wwwroot/js/bluetooth.js`. This only works against a **custom** GATT service; browsers block the standard HID-over-GATT profile, so a generic BLE pedal/keyboard won't pair this way (pair it at the OS level instead — it'll fire keydown events, which are already wired up). The remote currently notifies a bare command name only (no payload support yet). The service/characteristic UUIDs in `bluetooth.js` are placeholders (Nordic UART Service convention) — replace them with your device's actual UUIDs.
 
 ## Known gaps
 

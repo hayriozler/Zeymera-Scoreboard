@@ -9,5 +9,7 @@ public enum ScoreboardCommand
     SelectPlayer2,
     IncrementPoints,
     DecrementPoints,
-    CommitPoints
+    CommitPoints,
+    RenamePlayer1,
+    RenamePlayer2,
 }

@@ -385,7 +385,7 @@
     }
 
     /// <summary>Single entry point for keyboard, WebSocket control-app, and Bluetooth remote input.</summary>
-    private void ApplyCommand(ScoreboardCommand command)
+    private void ApplyCommand(ScoreboardCommand command, string? payload = null)
     {
         switch (command)
         {
@@ -414,12 +414,19 @@
             case ScoreboardCommand.CommitPoints:
                 CommitCurrentPoints();
                 break;
+
+            case ScoreboardCommand.RenamePlayer1:
+                SetPlayerName(1, payload);
+                break;
+            case ScoreboardCommand.RenamePlayer2:
+                SetPlayerName(2, payload);
+                break;
         }
     }
 
-    private void OnRemoteCommand(ScoreboardCommand command)
+    private void OnRemoteCommand(ScoreboardCommand command, string? payload)
     {
-        InvokeAsync(() => ApplyCommand(command));
+        InvokeAsync(() => ApplyCommand(command, payload));
     }
 
     private void OnHubConnectionChanged()
