@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Net.WebSockets;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Zeymera.Scoreboard.Client.Components;
 using Zeymera.Scoreboard.Client.Models;
 using Zeymera.Scoreboard.Client.Services;
@@ -36,24 +34,25 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 
     // EnsureCreated() is a no-op once the database file already exists, so it won't add
-    // tables introduced after the first run - create any such tables here explicitly.
+    // tables (or columns on existing tables) introduced after the first run - do both explicitly.
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS player (
             Id INTEGER PRIMARY KEY,
             Nickname TEXT NOT NULL,
+            Name TEXT NOT NULL DEFAULT '',
             PhotoPath TEXT NULL
         );
         """);
+
+    EnsureColumn(db, "player", "Name TEXT NOT NULL DEFAULT ''");
+    EnsureColumn(db, "scoreboard_state", "Player1Id INTEGER NULL");
+    EnsureColumn(db, "scoreboard_state", "Player2Id INTEGER NULL");
 }
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-var controlMessageJsonOptions = new JsonSerializerOptions
-{
-    PropertyNameCaseInsensitive = true,
-    Converters = { new JsonStringEnumConverter() }
-};
+const int maxControlMessageBytes = 16 * 1024 * 1024; // generous headroom for a base64-encoded player photo
 
 app.UseWebSockets();
 app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
@@ -68,30 +67,38 @@ app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
     hub.ControllerConnected();
     try
     {
-        var buffer = new byte[1024];
+        var buffer = new byte[8192];
         while (socket.State == WebSocketState.Open)
         {
-            var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), context.RequestAborted);
-            if (result.MessageType == WebSocketMessageType.Close)
+            using var messageStream = new MemoryStream();
+            WebSocketReceiveResult result;
+            var closed = false;
+            do
             {
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), context.RequestAborted);
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    closed = true;
+                    break;
+                }
+
+                messageStream.Write(buffer, 0, result.Count);
+                if (messageStream.Length > maxControlMessageBytes)
+                {
+                    await socket.CloseAsync(WebSocketCloseStatus.MessageTooBig, "message too large", CancellationToken.None);
+                    closed = true;
+                    break;
+                }
+            } while (!result.EndOfMessage);
+
+            if (closed)
+            {
                 break;
             }
 
-            var text = Encoding.UTF8.GetString(buffer, 0, result.Count).Trim();
-            ScoreboardCommandMessage? message;
-            try
-            {
-                message = JsonSerializer.Deserialize<ScoreboardCommandMessage>(text, controlMessageJsonOptions);
-            }
-            catch (JsonException)
-            {
-                // fall back to the old bare-command-name format, e.g. "IncrementPoints"
-                message = Enum.TryParse<ScoreboardCommand>(text, ignoreCase: true, out var bareCommand)
-                    ? new ScoreboardCommandMessage(bareCommand)
-                    : null;
-            }
-
+            var text = Encoding.UTF8.GetString(messageStream.ToArray());
+            var message = ScoreboardCommandParser.TryParse(text);
             if (message is not null)
             {
                 hub.Publish(message.Command, message.Payload);
@@ -113,3 +120,19 @@ app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
 });
 
 app.Run();
+
+static void EnsureColumn(DataContext db, string table, string columnDefinitionSql)
+{
+    try
+    {
+        // table/columnDefinitionSql are always hardcoded literals from our own call sites above,
+        // never user input - DDL identifiers can't be parameterized, so this is not injectable.
+#pragma warning disable EF1002
+        db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {columnDefinitionSql}");
+#pragma warning restore EF1002
+    }
+    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+    {
+        // column already present from a prior run - fine
+    }
+}

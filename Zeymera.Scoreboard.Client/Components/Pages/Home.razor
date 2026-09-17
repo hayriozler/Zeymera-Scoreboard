@@ -6,10 +6,12 @@
 @inject HttpClient Http
 @inject DataContext DbContext
 @inject ScoreboardCommandHub Hub
+@inject IWebHostEnvironment Env
 @using Zeymera.Scoreboard.Client.Models
 @using Zeymera.Scoreboard.Client.Services
 @using Microsoft.AspNetCore.Components.Web
-@using Microsoft.EntityFrameworkCore;
+@using Microsoft.EntityFrameworkCore
+@using System.Text.Json
 
 <div @ref="board" class="board" tabindex="0" @onkeydown="HandleKeyDown" @onclick="RequestFullscreenAsync">
 
@@ -46,7 +48,11 @@
                 {
                     <span class="ball white turn-ball" aria-hidden="true"></span>
                 }
-                <span>@(string.IsNullOrWhiteSpace(Current.Player1Name) ? L.T("Player1Default") : Current.Player1Name)</span>
+                @if (!string.IsNullOrEmpty(GetPhotoPath(1)))
+                {
+                    <img class="player-photo" src="@GetPhotoPath(1)" alt="" />
+                }
+                <span>@GetDisplayName(1)</span>
             </div>
             <div class="player-score">@Current.Player1Score</div>
         </section>
@@ -69,7 +75,11 @@
                 {
                     <span class="ball yellow turn-ball" aria-hidden="true"></span>
                 }
-                <span>@(string.IsNullOrWhiteSpace(Current.Player2Name) ? L.T("Player2Default") : Current.Player2Name)</span>
+                @if (!string.IsNullOrEmpty(GetPhotoPath(2)))
+                {
+                    <img class="player-photo" src="@GetPhotoPath(2)" alt="" />
+                }
+                <span>@GetDisplayName(2)</span>
             </div>
             <div class="player-score yellow">@Current.Player2Score</div>
         </section>
@@ -113,31 +123,13 @@
                 <span>@L.T("Player1Label")</span>
                 <input type="text" value="@Current.Player1Name" placeholder="@L.T("Player1Default")"
                        @onchange="e => SetPlayerName(1, e.Value?.ToString())" />
-                @if (_players.Count > 0)
-                {
-                    <select @onchange="e => SelectPlayer(1, e.Value?.ToString())">
-                        <option value="">@L.T("ChoosePlayer")</option>
-                        @foreach (var p in _players)
-                        {
-                            <option value="@p.Code">@p.Name</option>
-                        }
-                    </select>
-                }
+                <button @onclick="() => OpenPlayerPickerAsync(1)">@L.T("ChoosePlayer")</button>
             </div>
             <div class="control-group">
                 <span>@L.T("Player2Label")</span>
                 <input type="text" value="@Current.Player2Name" placeholder="@L.T("Player2Default")"
                        @onchange="e => SetPlayerName(2, e.Value?.ToString())" />
-                @if (_players.Count > 0)
-                {
-                    <select @onchange="e => SelectPlayer(2, e.Value?.ToString())">
-                        <option value="">@L.T("ChoosePlayer")</option>
-                        @foreach (var p in _players)
-                        {
-                            <option value="@p.Code">@p.Name</option>
-                        }
-                    </select>
-                }
+                <button @onclick="() => OpenPlayerPickerAsync(2)">@L.T("ChoosePlayer")</button>
             </div>
             <div class="control-group">
                 <span>@L.T("P1Score")</span>
@@ -197,7 +189,44 @@
                     <button @onclick="ConnectBluetoothAsync">Pair remote</button>
                 }
             </div>
+            <div class="control-group">
+                <a href="/players">Manage Players</a>
+            </div>
             <p class="hint">@L.T("ControlsHint")</p>
+        </div>
+    }
+
+    @if (_showPlayerPicker is { } slot)
+    {
+        <div class="player-picker-overlay" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            <div class="player-picker-dialog">
+                <h3>@L.T(slot == 1 ? "Player1Label" : "Player2Label")</h3>
+                @if (_rosterPlayers.Count == 0)
+                {
+                    <p class="picker-empty">No players in the roster yet - add some on the Players page.</p>
+                }
+                else
+                {
+                    <div class="picker-list">
+                        @foreach (var p in _rosterPlayers)
+                        {
+                            <button class="picker-row" @onclick="() => SelectRosterPlayer(slot, p.Id)">
+                                @if (!string.IsNullOrEmpty(p.PhotoPath))
+                                {
+                                    <img src="@p.PhotoPath" alt="" />
+                                }
+                                else
+                                {
+                                    <div class="picker-photo-placeholder">?</div>
+                                }
+                                <span>@(string.IsNullOrWhiteSpace(p.Nickname) ? p.Name : p.Nickname)</span>
+                            </button>
+                        }
+                    </div>
+                }
+                <button class="picker-clear" @onclick="() => ClearRosterPlayer(slot)">Use manual name instead</button>
+                <button class="picker-close" @onclick="ClosePlayerPicker">Close</button>
+            </div>
         </div>
     }
 </div>
@@ -211,8 +240,12 @@
     private bool _bluetoothConnected;
     private string? _bluetoothDeviceName;
     private ElementReference board;
-    private List<PlayerOption> _players = new();
     private readonly CancellationTokenSource _shotClockCts = new();
+
+    private Player? _resolvedPlayer1;
+    private Player? _resolvedPlayer2;
+    private List<Player> _rosterPlayers = new();
+    private int? _showPlayerPicker;
 
     private ScoreboardState Current =new();
 
@@ -258,8 +291,57 @@
             Current= saved;
         }
         else Current = game;
+        ResolvePlayers();
         StateHasChanged();
 
+    }
+
+    private void ResolvePlayers()
+    {
+        _resolvedPlayer1 = Current.Player1Id is int id1 ? DbContext.Players.FirstOrDefault(p => p.Id == id1) : null;
+        _resolvedPlayer2 = Current.Player2Id is int id2 ? DbContext.Players.FirstOrDefault(p => p.Id == id2) : null;
+    }
+
+    private string GetDisplayName(int slot)
+    {
+        var resolved = slot == 1 ? _resolvedPlayer1 : _resolvedPlayer2;
+        if (resolved is not null)
+        {
+            return string.IsNullOrWhiteSpace(resolved.Nickname) ? resolved.Name : resolved.Nickname;
+        }
+
+        var manual = slot == 1 ? Current.Player1Name : Current.Player2Name;
+        return string.IsNullOrWhiteSpace(manual) ? L.T(slot == 1 ? "Player1Default" : "Player2Default") : manual;
+    }
+
+    private string? GetPhotoPath(int slot) => (slot == 1 ? _resolvedPlayer1 : _resolvedPlayer2)?.PhotoPath;
+
+    private async Task OpenPlayerPickerAsync(int slot)
+    {
+        _rosterPlayers = await DbContext.Players.OrderBy(p => p.Id).ToListAsync();
+        _showPlayerPicker = slot;
+        StateHasChanged();
+    }
+
+    private void ClosePlayerPicker()
+    {
+        _showPlayerPicker = null;
+    }
+
+    private void SelectRosterPlayer(int slot, int playerId)
+    {
+        if (slot == 1) Current.Player1Id = playerId; else Current.Player2Id = playerId;
+        ResolvePlayers();
+        _showPlayerPicker = null;
+        Persist();
+    }
+
+    private void ClearRosterPlayer(int slot)
+    {
+        if (slot == 1) Current.Player1Id = null; else Current.Player2Id = null;
+        ResolvePlayers();
+        _showPlayerPicker = null;
+        Persist();
     }
     private void Adjust(Action<ScoreboardState> action)
     {
@@ -285,14 +367,6 @@
         Persist();
     }
 
-    private void SelectPlayer(int slot, string? code)
-    {
-        var player = _players.FirstOrDefault(p => p.Code == code);
-        if (player is not null)
-        {
-            SetPlayerName(slot, player.Name);
-        }
-    }
     private void StopShotClock()
     {
         Current?.ShotClockActive = false;
@@ -309,9 +383,6 @@
         Current?.ShotClockActive = false;
         Persist();
     }
-
-    private sealed record PlayerOption(string Code, string Name, int? TeamId, string? TeamName, DateTimeOffset CreatedAt);
-
 
     private void OnLanguageChanged(ChangeEventArgs e) => L.SetLanguage(e.Value?.ToString());
 
@@ -363,8 +434,14 @@
         Persist();
     }
 
-    private void HandleKeyDown(KeyboardEventArgs e)
+    private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        if (e.Key is "p" or "P")
+        {
+            await OpenPlayerPickerAsync(Current.ActivePlayer);
+            return;
+        }
+
         ScoreboardCommand? command = e.Key switch
         {
             "c" or "C" => ScoreboardCommand.ToggleControls,
@@ -385,7 +462,7 @@
     }
 
     /// <summary>Single entry point for keyboard, WebSocket control-app, and Bluetooth remote input.</summary>
-    private void ApplyCommand(ScoreboardCommand command, string? payload = null)
+    private void ApplyCommand(ScoreboardCommand command, JsonElement? payload = null)
     {
         switch (command)
         {
@@ -416,15 +493,87 @@
                 break;
 
             case ScoreboardCommand.RenamePlayer1:
-                SetPlayerName(1, payload);
+                SetPlayerName(1, GetStringPayload(payload));
                 break;
             case ScoreboardCommand.RenamePlayer2:
-                SetPlayerName(2, payload);
+                SetPlayerName(2, GetStringPayload(payload));
+                break;
+            case ScoreboardCommand.UpsertPlayer:
+                UpsertPlayerFromPayload(payload);
                 break;
         }
     }
 
-    private void OnRemoteCommand(ScoreboardCommand command, string? payload)
+    private static string? GetStringPayload(JsonElement? payload) =>
+        payload?.ValueKind == JsonValueKind.String ? payload.Value.GetString() : null;
+
+    private void UpsertPlayerFromPayload(JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } element)
+        {
+            return;
+        }
+
+        PlayerUpsertPayload? data;
+        try
+        {
+            data = element.Deserialize<PlayerUpsertPayload>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (data is null)
+        {
+            return;
+        }
+
+        string? photoPath = null;
+        if (!string.IsNullOrEmpty(data.PhotoBase64))
+        {
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(data.PhotoBase64);
+            }
+            catch (FormatException)
+            {
+                return;
+            }
+
+            var extension = string.IsNullOrWhiteSpace(data.PhotoExtension) ? "jpg" : data.PhotoExtension.TrimStart('.');
+            var playersFolder = Path.Combine(Env.WebRootPath, "Players");
+            Directory.CreateDirectory(playersFolder);
+            var fileName = $"{data.Id}.{extension}";
+            File.WriteAllBytes(Path.Combine(playersFolder, fileName), bytes);
+            photoPath = $"Players/{fileName}";
+        }
+
+        var existing = DbContext.Players.FirstOrDefault(p => p.Id == data.Id);
+        if (existing is null)
+        {
+            DbContext.Players.Add(new Player
+            {
+                Id = data.Id,
+                Nickname = data.Nickname ?? "",
+                Name = data.Name ?? "",
+                PhotoPath = photoPath
+            });
+        }
+        else
+        {
+            if (data.Nickname is not null) existing.Nickname = data.Nickname;
+            if (data.Name is not null) existing.Name = data.Name;
+            if (photoPath is not null) existing.PhotoPath = photoPath;
+        }
+
+        DbContext.SaveChanges();
+        ResolvePlayers();
+        StateHasChanged();
+    }
+
+    private void OnRemoteCommand(ScoreboardCommand command, JsonElement? payload)
     {
         InvokeAsync(() => ApplyCommand(command, payload));
     }
@@ -474,11 +623,12 @@
     }
 
     [JSInvokable]
-    public void OnBluetoothCommand(string commandName)
+    public void OnBluetoothCommand(string raw)
     {
-        if (Enum.TryParse<ScoreboardCommand>(commandName, ignoreCase: true, out var command))
+        var message = ScoreboardCommandParser.TryParse(raw);
+        if (message is not null)
         {
-            InvokeAsync(() => ApplyCommand(command));
+            InvokeAsync(() => ApplyCommand(message.Command, message.Payload));
         }
     }
 

@@ -168,6 +168,14 @@
     letter-spacing: 0.15em;
 }
 
+.player-photo {
+    width: clamp(1.4rem, 2.6vw, 2.2rem);
+    height: clamp(1.4rem, 2.6vw, 2.2rem);
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--white);
+}
+
 .turn-ball {
     width: clamp(1.6rem, 3.2vw, 2.6rem);
     height: clamp(1.6rem, 3.2vw, 2.6rem);
@@ -376,9 +384,117 @@
     color: rgba(242, 242, 242, 0.6);
 }
 
+.control-group a {
+    background: var(--red-dark);
+    color: var(--white);
+    border-radius: 4px;
+    padding: 0.25rem 0.6rem;
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.control-group a:hover {
+    background: var(--red);
+}
+
 .hint {
     margin: 0;
     color: var(--label-gray);
     font-size: 0.75rem;
     flex-basis: 100%;
+}
+
+.player-picker-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+}
+
+.player-picker-dialog {
+    background: #0a0a0a;
+    border: 2px solid var(--red);
+    border-radius: 8px;
+    padding: 1.5rem;
+    max-width: 420px;
+    width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.player-picker-dialog h3 {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--white);
+}
+
+.picker-empty {
+    color: var(--label-gray);
+    margin: 0;
+}
+
+.picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.picker-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: var(--red-dark);
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 0.8rem;
+    color: var(--white);
+    font-weight: 700;
+    cursor: pointer;
+    text-align: left;
+}
+
+.picker-row:hover {
+    background: var(--red);
+}
+
+.picker-row img,
+.picker-photo-placeholder {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.picker-photo-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #333;
+    color: var(--label-gray);
+    font-weight: 800;
+}
+
+.picker-clear,
+.picker-close {
+    background: transparent;
+    border: 1px solid var(--red-dark);
+    color: var(--white);
+    border-radius: 6px;
+    padding: 0.5rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.picker-clear:hover,
+.picker-close:hover {
+    border-color: var(--red);
 }

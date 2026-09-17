@@ -1,0 +1,193 @@
+@page "/players"
+@inject DataContext DbContext
+@inject IWebHostEnvironment Env
+@using Zeymera.Scoreboard.Client.Models
+@using Zeymera.Scoreboard.Client.Services
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="players-page">
+    <header class="players-header">
+        <h1>Players</h1>
+        <a class="back-link" href="/">&larr; Back to board</a>
+    </header>
+
+    <EditForm Model="_form" OnValidSubmit="SavePlayerAsync" class="player-form">
+        <div class="field">
+            <label for="player-id">Id</label>
+            <InputNumber id="player-id" @bind-Value="_form.Id" />
+        </div>
+        <div class="field">
+            <label for="player-nickname">Nickname</label>
+            <InputText id="player-nickname" @bind-Value="_form.Nickname" />
+        </div>
+        <div class="field">
+            <label for="player-name">Name</label>
+            <InputText id="player-name" @bind-Value="_form.Name" />
+        </div>
+        <div class="field">
+            <label for="player-photo">Photo</label>
+            <InputFile id="player-photo" OnChange="OnPhotoSelected" accept="image/*" />
+        </div>
+
+        @if (_errorMessage is not null)
+        {
+            <p class="form-error">@_errorMessage</p>
+        }
+
+        <button type="submit" class="save-btn" disabled="@_isSaving">@(_isSaving ? "Saving..." : "Save Player")</button>
+    </EditForm>
+
+    <h2>Existing players</h2>
+    @if (_players.Count == 0)
+    {
+        <p class="empty-hint">No players yet.</p>
+    }
+    else
+    {
+        <div class="player-grid">
+            @foreach (var p in _players)
+            {
+                <div class="player-card">
+                    @if (!string.IsNullOrEmpty(p.PhotoPath))
+                    {
+                        <img src="@p.PhotoPath" alt="@p.Nickname" />
+                    }
+                    else
+                    {
+                        <div class="photo-placeholder">?</div>
+                    }
+                    <div class="player-info">
+                        <span class="player-id">#@p.Id</span>
+                        <span class="player-nickname">@p.Nickname</span>
+                        @if (!string.IsNullOrEmpty(p.Name))
+                        {
+                            <span class="player-name">@p.Name</span>
+                        }
+                    </div>
+                    <button class="edit-btn" @onclick="() => EditPlayer(p)">Edit</button>
+                    <button class="delete-btn" @onclick="() => DeletePlayerAsync(p.Id)">Delete</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Player> _players = new();
+    private PlayerFormModel _form = new();
+    private IBrowserFile? _selectedPhoto;
+    private string? _errorMessage;
+    private bool _isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPlayersAsync();
+    }
+
+    private async Task LoadPlayersAsync()
+    {
+        _players = await DbContext.Players.OrderBy(p => p.Id).ToListAsync();
+    }
+
+    private void OnPhotoSelected(InputFileChangeEventArgs e)
+    {
+        _selectedPhoto = e.File;
+    }
+
+    private void EditPlayer(Player player)
+    {
+        _form = new PlayerFormModel
+        {
+            Id = player.Id,
+            Nickname = player.Nickname,
+            Name = player.Name
+        };
+        _selectedPhoto = null;
+        _errorMessage = null;
+    }
+
+    private async Task SavePlayerAsync()
+    {
+        _errorMessage = null;
+
+        if (_form.Id <= 0)
+        {
+            _errorMessage = "Id must be a positive number.";
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            string? photoPath = null;
+            if (_selectedPhoto is not null)
+            {
+                var extension = Path.GetExtension(_selectedPhoto.Name);
+                if (string.IsNullOrEmpty(extension))
+                {
+                    extension = ".jpg";
+                }
+
+                var playersFolder = Path.Combine(Env.WebRootPath, "Players");
+                Directory.CreateDirectory(playersFolder);
+                var fileName = $"{_form.Id}{extension}";
+                var fullPath = Path.Combine(playersFolder, fileName);
+
+                await using var readStream = _selectedPhoto.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                await using var writeStream = File.Create(fullPath);
+                await readStream.CopyToAsync(writeStream);
+
+                photoPath = $"Players/{fileName}";
+            }
+
+            var existing = await DbContext.Players.FirstOrDefaultAsync(p => p.Id == _form.Id);
+            if (existing is null)
+            {
+                DbContext.Players.Add(new Player
+                {
+                    Id = _form.Id,
+                    Nickname = _form.Nickname,
+                    Name = _form.Name,
+                    PhotoPath = photoPath
+                });
+            }
+            else
+            {
+                existing.Nickname = _form.Nickname;
+                existing.Name = _form.Name;
+                if (photoPath is not null)
+                {
+                    existing.PhotoPath = photoPath;
+                }
+            }
+
+            await DbContext.SaveChangesAsync();
+            _form = new PlayerFormModel();
+            _selectedPhoto = null;
+            await LoadPlayersAsync();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeletePlayerAsync(int id)
+    {
+        var existing = await DbContext.Players.FirstOrDefaultAsync(p => p.Id == id);
+        if (existing is not null)
+        {
+            DbContext.Players.Remove(existing);
+            await DbContext.SaveChangesAsync();
+            await LoadPlayersAsync();
+        }
+    }
+
+    private sealed class PlayerFormModel
+    {
+        public int Id { get; set; }
+        public string Nickname { get; set; } = "";
+        public string Name { get; set; } = "";
+    }
+}

@@ -12,4 +12,5 @@ public enum ScoreboardCommand
     CommitPoints,
     RenamePlayer1,
     RenamePlayer2,
+    UpsertPlayer,
 }

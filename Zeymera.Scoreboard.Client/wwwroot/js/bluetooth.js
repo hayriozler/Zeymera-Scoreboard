@@ -2,9 +2,14 @@
 // standard HID-over-GATT service, so a generic BLE keyboard/pedal cannot be
 // used here. This targets the Nordic UART Service convention commonly used
 // by ESP32/Arduino BLE projects. Replace the UUIDs below to match your
-// remote's firmware, and have it write the command name (e.g.
-// "IncrementPoints", "CommitPoints" - see ScoreboardCommand.cs) as a UTF-8
-// string to the notify characteristic on each button press.
+// remote's firmware. Each notification's UTF-8 text is forwarded as-is to
+// C# (OnBluetoothCommand), which accepts either a bare command name (e.g.
+// "IncrementPoints") or the same JSON envelope the WebSocket control channel
+// uses, e.g. {"command":"UpsertPlayer","payload":{"id":1,"nickname":"..."}} -
+// see ScoreboardCommandParser.cs for the exact format. Note a full player
+// photo (base64) is a lot of data for typical BLE notify MTU sizes - that
+// payload is realistically better suited to the WebSocket channel unless
+// your firmware chunks/reassembles large messages itself.
 const SERVICE_UUID = "6e400001-b5a3-f393-e9a9-e50e24dcca9e";
 const NOTIFY_CHARACTERISTIC_UUID = "6e400003-b5a3-f393-e9a9-e50e24dcca9e";
 
