@@ -7,46 +7,48 @@
 @using Microsoft.AspNetCore.Components.Forms
 
 <div class="players-page">
-    <p><a href="/">&larr; Back to board</a></p>
+    <p><a class="back-link" href="/">&larr; Back to board</a></p>
     <h1>Players</h1>
 
-    <EditForm Model="_form" OnValidSubmit="SavePlayerAsync">
-        <div>
+    <EditForm Model="_form" OnValidSubmit="SavePlayerAsync" class="player-form">
+        <div class="form-field">
             <label for="player-nickname">Nickname</label>
             <InputText id="player-nickname" @bind-Value="_form.Nickname" />
         </div>
-        <div>
+        <div class="form-field">
             <label for="player-name">Name</label>
             <InputText id="player-name" @bind-Value="_form.Name" />
         </div>
-        <div>
+        <div class="form-field">
             <label for="player-photo">Photo</label>
             <InputFile id="player-photo" OnChange="OnPhotoSelected" accept="image/*" />
         </div>
 
         @if (_errorMessage is not null)
         {
-            <p style="color:red">@_errorMessage</p>
+            <p class="form-error">@_errorMessage</p>
         }
 
-        <button type="submit" disabled="@_isSaving">@(_isSaving ? "Saving..." : _form.Id == 0 ? "Add Player" : "Save Changes")</button>
-        @if (_form.Id != 0)
-        {
-            <button type="button" @onclick="CancelEdit">Cancel</button>
-        }
+        <div class="form-actions">
+            <button type="submit" class="btn-primary" disabled="@_isSaving">@(_isSaving ? "Saving..." : _form.Id == 0 ? "Add Player" : "Save Changes")</button>
+            @if (_form.Id != 0)
+            {
+                <button type="button" class="btn-secondary" @onclick="CancelEdit">Cancel</button>
+            }
+        </div>
     </EditForm>
 
     <h2>Existing players</h2>
     @if (_players.Count == 0)
     {
-        <p>No players yet.</p>
+        <p class="empty-hint">No players yet.</p>
     }
     else
     {
-        <table>
+        <table class="player-table">
             <thead>
                 <tr>
-                    <th>Photo</th>
+                    <th></th>
                     <th>Id</th>
                     <th>Nickname</th>
                     <th>Name</th>
@@ -57,18 +59,24 @@
                 @foreach (var p in _players)
                 {
                     <tr>
-                        <td>
+                        <td class="player-photo-cell">
                             @if (!string.IsNullOrEmpty(p.PhotoPath))
                             {
-                                <img src="@p.PhotoPath" alt="" width="40" height="40" style="object-fit:cover;border-radius:50%" />
+                                <img src="@p.PhotoPath" alt="" />
+                            }
+                            else
+                            {
+                                <div class="player-photo-placeholder">?</div>
                             }
                         </td>
                         <td>@p.Id</td>
                         <td>@p.Nickname</td>
                         <td>@p.Name</td>
                         <td>
-                            <button @onclick="() => EditPlayer(p)">Edit</button>
-                            <button @onclick="() => DeletePlayerAsync(p.Id)">Delete</button>
+                            <div class="row-actions">
+                                <button @onclick="() => EditPlayer(p)">Edit</button>
+                                <button class="delete-btn" @onclick="() => DeletePlayerAsync(p.Id)">Delete</button>
+                            </div>
                         </td>
                     </tr>
                 }
