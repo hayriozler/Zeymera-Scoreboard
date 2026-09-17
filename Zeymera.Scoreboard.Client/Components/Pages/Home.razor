@@ -195,7 +195,7 @@
             </div>
             <div class="control-group">
                 <button @onclick="EndGame">End Game</button>
-                <button @onclick="ConfirmAndNewGameAsync">New Game</button>
+                <button @onclick="NewGame">New Game</button>
             </div>
             <p class="hint">@L.T("ControlsHint")</p>
         </div>
@@ -481,15 +481,6 @@
 
     /// <summary>Resets the board for a new match. Does not save anything - press "End Game" first
     /// if the current match's stats should be kept.</summary>
-    private async Task ConfirmAndNewGameAsync()
-    {
-        var confirmed = await JS.InvokeAsync<bool>("confirm", "Start a new game? This clears the current scores - press \"End Game\" first if you haven't saved this match yet.");
-        if (confirmed)
-        {
-            NewGame();
-        }
-    }
-
     private void NewGame()
     {
         Current.Player1Score = 0;
