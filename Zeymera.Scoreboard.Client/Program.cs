@@ -34,7 +34,30 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 
     // EnsureCreated() is a no-op once the database file already exists, so it won't add
-    // tables (or columns on existing tables) introduced after the first run - do both explicitly.
+    // tables introduced after the first run - create them here explicitly.
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS scoreboard_state (
+            Id INTEGER PRIMARY KEY,
+            Player1Name TEXT NOT NULL DEFAULT '',
+            Player2Name TEXT NOT NULL DEFAULT '',
+            Player1Id INTEGER NULL,
+            Player2Id INTEGER NULL,
+            Player1Score INTEGER NOT NULL,
+            Player2Score INTEGER NOT NULL,
+            Inning INTEGER NOT NULL,
+            MatchTarget INTEGER NOT NULL,
+            Player1Avg REAL NOT NULL,
+            Player1HighRun INTEGER NOT NULL,
+            CurrentPoints INTEGER NOT NULL,
+            Player2Avg REAL NOT NULL,
+            Player2HighRun INTEGER NOT NULL,
+            ShotClockSeconds INTEGER NOT NULL,
+            ShotClockRemaining REAL NOT NULL,
+            ShotClockActive INTEGER NOT NULL,
+            ActivePlayer INTEGER NOT NULL
+        );
+        """);
+
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS player (
             Id INTEGER PRIMARY KEY,
@@ -44,9 +67,6 @@ using (var scope = app.Services.CreateScope())
         );
         """);
 
-    EnsureColumn(db, "player", "Name TEXT NOT NULL DEFAULT ''");
-    EnsureColumn(db, "scoreboard_state", "Player1Id INTEGER NULL");
-    EnsureColumn(db, "scoreboard_state", "Player2Id INTEGER NULL");
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS match_result (
@@ -140,33 +160,3 @@ app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
 });
 
 app.Run();
-
-static void EnsureColumn(DataContext db, string table, string columnDefinitionSql)
-{
-    var columnName = columnDefinitionSql.Split(' ')[0];
-
-    var connection = db.Database.GetDbConnection();
-    if (connection.State != System.Data.ConnectionState.Open)
-    {
-        connection.Open();
-    }
-
-    using (var checkCommand = connection.CreateCommand())
-    {
-        checkCommand.CommandText = $"PRAGMA table_info({table})";
-        using var reader = checkCommand.ExecuteReader();
-        while (reader.Read())
-        {
-            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
-            {
-                return; // column already present from a prior run (or from a fresh EnsureCreated() that already includes it) - nothing to do
-            }
-        }
-    }
-
-    // table/columnDefinitionSql are always hardcoded literals from our own call sites above,
-    // never user input - DDL identifiers can't be parameterized, so this is not injectable.
-#pragma warning disable EF1002
-    db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {columnDefinitionSql}");
-#pragma warning restore EF1002
-}
