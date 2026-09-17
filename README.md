@@ -43,7 +43,7 @@ The scoreboard accepts the same commands from three sources, all funneled throug
    {"command":"IncrementPoints"}
    {"command":"RenamePlayer1","payload":"Hayri"}
    ```
-   `command` is one of the `ScoreboardCommand` enum names (case-insensitive): `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `RenamePlayer1`, `RenamePlayer2`, `UpsertPlayer`, `FinishMatch`. `payload` is optional: a plain string for the two rename commands, a structured object for `UpsertPlayer` (see below), and ignored by every other command. For backward compatibility the endpoint also still accepts a bare command name with no payload, e.g. just the text `IncrementPoints`.
+   `command` is one of the `ScoreboardCommand` enum names (case-insensitive): `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `RenamePlayer1`, `RenamePlayer2`, `UpsertPlayer`, `EndGame`, `NewGame`. `payload` is optional: a plain string for the two rename commands, a structured object for `UpsertPlayer` (see below), and ignored by every other command. For backward compatibility the endpoint also still accepts a bare command name with no payload, e.g. just the text `IncrementPoints`.
 
    `UpsertPlayer` adds or updates a row in the local `player` roster (see "Player roster" below) — the photo is optional and only needs sending when it changes:
    ```json
@@ -70,9 +70,14 @@ The `player` table (SQLite, same database as the scoreboard state) is a local ro
 
 ## Match history
 
-"Finish Match" in the controls overlay (confirms before proceeding) snapshots the current game into the `match_result` table and resets the board for a new match. Each row keeps: date/time played, both players' display names (a copy, not just a `PlayerId` reference — history stays readable even if that roster player is later renamed or deleted), scores, averages, high runs, innings played, the match target, and the winner. View it at **`/matches`**, linked from the controls overlay, with the winner's name highlighted.
+Ending a match is two separate steps, both in the controls overlay:
 
-`FinishMatch` is also one of the `ScoreboardCommand`s, so it can be triggered remotely over WebSocket/Bluetooth as well as the on-screen button — remote triggers skip the local confirmation dialog (the calling app is expected to confirm on its own end).
+- **"End Game"** snapshots the current game into the `match_result` table — date/time played, both players' display names (a copy, not just a `PlayerId` reference, so history stays readable even if that roster player is later renamed or deleted), scores, averages, high runs, innings played, the match target, and the winner. It does **not** reset the board — the final score stays on screen (e.g. for a photo/announcement).
+- **"New Game"** (confirms before proceeding) resets the board for the next match. It does **not** save anything — press "End Game" first if the current match's stats should be kept.
+
+View history at **`/matches`**, linked from the controls overlay, with the winner's name highlighted.
+
+Both are also `ScoreboardCommand`s (`EndGame`, `NewGame`), so either can be triggered remotely over WebSocket/Bluetooth as well as the on-screen buttons — a remote `NewGame` skips the local confirmation dialog (the calling app is expected to confirm on its own end).
 
 ## Known gaps
 
