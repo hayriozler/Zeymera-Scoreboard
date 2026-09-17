@@ -17,6 +17,10 @@ string folder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "Db");
 if (!Directory.Exists(folder))
     Directory.CreateDirectory(folder);
 var dbName = Path.Combine(folder, "scoreboard.db");
+
+string playerPhotosFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "Players");
+if (!Directory.Exists(playerPhotosFolder))
+    Directory.CreateDirectory(playerPhotosFolder);
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7153/";
 builder.Services.AddDbContextFactory<DataContext>(options => options.UseSqlite($"Data Source={dbName}"));
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
@@ -26,8 +30,21 @@ builder.Services.AddSingleton<ScoreboardCommandHub>();
 
 var app = builder.Build();
 app.UseAntiforgery();
-using var scope = app.Services.CreateScope();
-scope.ServiceProvider.GetRequiredService<DataContext>().Database.EnsureCreated();
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+    db.Database.EnsureCreated();
+
+    // EnsureCreated() is a no-op once the database file already exists, so it won't add
+    // tables introduced after the first run - create any such tables here explicitly.
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS player (
+            Id INTEGER PRIMARY KEY,
+            Nickname TEXT NOT NULL,
+            PhotoPath TEXT NULL
+        );
+        """);
+}
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
