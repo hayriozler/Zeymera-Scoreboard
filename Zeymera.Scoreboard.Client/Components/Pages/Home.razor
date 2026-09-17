@@ -535,15 +535,23 @@
         {
             _shotClockCts.Cancel();
             _shotClockCts.Dispose();
-        }        
-        if (_kiosk is not null)
-        {
-            await _kiosk.DisposeAsync();
         }
-        if (_bluetooth is not null)
+        try
         {
-            await _bluetooth.InvokeVoidAsync("disconnect");
-            await _bluetooth.DisposeAsync();
+            if (_kiosk is not null)
+            {
+                await _kiosk.DisposeAsync();
+            }
+            if (_bluetooth is not null)
+            {
+                await _bluetooth.InvokeVoidAsync("disconnect");
+                await _bluetooth.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // circuit is already gone (tab closed, refresh, connection drop) - the browser
+            // side is being torn down anyway, so there's nothing left to clean up via JS interop
         }
         _selfRef?.Dispose();
     }
