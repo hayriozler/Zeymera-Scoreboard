@@ -60,6 +60,14 @@ app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
             }
         }
     }
+    catch (OperationCanceledException)
+    {
+        // control device dropped the connection without a clean close handshake (tab closed, network loss, etc.)
+    }
+    catch (WebSocketException)
+    {
+        // ditto - abrupt disconnect at the socket level
+    }
     finally
     {
         hub.ControllerDisconnected();
