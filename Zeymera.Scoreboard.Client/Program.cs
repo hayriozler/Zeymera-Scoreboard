@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Net.WebSockets;
 using System.Text;
-using System.Text.Json;
 using Zeymera.Scoreboard.Client.Components;
 using Zeymera.Scoreboard.Client.Models;
 using Zeymera.Scoreboard.Client.Services;
@@ -95,8 +94,6 @@ app.MapRazorComponents<App>()
 
 const int maxControlMessageBytes = 16 * 1024 * 1024; // generous headroom for a base64-encoded player photo
 
-var wsJsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-
 app.UseWebSockets();
 app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextFactory<DataContext> dbFactory) =>
 {
@@ -107,7 +104,7 @@ app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextF
     }
 
     using var socket = await context.WebSockets.AcceptWebSocketAsync();
-    hub.ControllerConnected();
+    hub.ControllerConnected(socket);
     try
     {
         await using (var db = await dbFactory.CreateDbContextAsync(context.RequestAborted))
@@ -115,7 +112,7 @@ app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextF
             var snapshot = await BuildSnapshotAsync(db);
             if (snapshot is not null)
             {
-                var stateJson = JsonSerializer.Serialize(new { type = "state", state = snapshot }, wsJsonOptions);
+                var stateJson = ScoreboardStateSnapshotFactory.ToWireJson(snapshot);
                 if (socket.State == WebSocketState.Open)
                     await socket.SendAsync(Encoding.UTF8.GetBytes(stateJson), WebSocketMessageType.Text, true, context.RequestAborted);
             }
@@ -169,7 +166,7 @@ app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextF
     }
     finally
     {
-        hub.ControllerDisconnected();
+        hub.ControllerDisconnected(socket);
     }
 });
 
@@ -186,29 +183,5 @@ static async Task<ScoreboardStateSnapshot?> BuildSnapshotAsync(DataContext db)
     var player1 = state.Player1Id is int id1 ? await db.Players.FirstOrDefaultAsync(p => p.Id == id1) : null;
     var player2 = state.Player2Id is int id2 ? await db.Players.FirstOrDefaultAsync(p => p.Id == id2) : null;
 
-    static string ResolveName(Player? player, string manualName, string fallback)
-    {
-        if (player is not null)
-        {
-            return string.IsNullOrWhiteSpace(player.Nickname) ? player.Name : player.Nickname;
-        }
-        return string.IsNullOrWhiteSpace(manualName) ? fallback : manualName;
-    }
-
-    return new ScoreboardStateSnapshot(
-        ResolveName(player1, state.Player1Name, "Player 1"),
-        ResolveName(player2, state.Player2Name, "Player 2"),
-        state.Player1Score,
-        state.Player2Score,
-        state.Player1Avg,
-        state.Player2Avg,
-        state.Player1HighRun,
-        state.Player2HighRun,
-        state.ActivePlayer,
-        state.CurrentPoints,
-        state.Inning,
-        state.MatchTarget,
-        state.ShotClockActive,
-        state.ShotClockRemaining,
-        state.ShotClockSeconds);
+    return ScoreboardStateSnapshotFactory.Create(state, player1, player2);
 }

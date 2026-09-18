@@ -370,6 +370,24 @@
     {
         DbContext.SaveChanges();
         StateHasChanged();
+        _ = BroadcastStateAsync();
+    }
+
+    /// <summary>Pushes the current board state to every connected WS control client, so none of
+    /// them are left showing a stale view after a change made here (keyboard, on-screen controls,
+    /// another remote command, etc.). Fire-and-forget from Persist() - broadcasting is best-effort
+    /// and must never block or fail the actual board update.</summary>
+    private async Task BroadcastStateAsync()
+    {
+        try
+        {
+            var snapshot = ScoreboardStateSnapshotFactory.Create(Current, _resolvedPlayer1, _resolvedPlayer2);
+            await Hub.BroadcastStateAsync(snapshot);
+        }
+        catch
+        {
+            // best-effort broadcast; a failed send to one client shouldn't affect the board itself
+        }
     }
     private void SetPlayerName(int slot, string? name)
     {
@@ -608,6 +626,42 @@
                     SetMatchTarget(matchTarget);
                 }
                 break;
+            case ScoreboardCommand.IncrementPlayer1Score:
+                Adjust(s => s.Player1Score++);
+                break;
+            case ScoreboardCommand.DecrementPlayer1Score:
+                Adjust(s => s.Player1Score--);
+                break;
+            case ScoreboardCommand.IncrementPlayer2Score:
+                Adjust(s => s.Player2Score++);
+                break;
+            case ScoreboardCommand.DecrementPlayer2Score:
+                Adjust(s => s.Player2Score--);
+                break;
+            case ScoreboardCommand.IncrementInning:
+                Adjust(s => s.Inning++);
+                break;
+            case ScoreboardCommand.DecrementInning:
+                Adjust(s => s.Inning--);
+                break;
+            case ScoreboardCommand.SelectRosterPlayer1:
+                if (GetIntPayload(payload) is int rosterPlayer1Id)
+                {
+                    SelectRosterPlayer(1, rosterPlayer1Id);
+                }
+                break;
+            case ScoreboardCommand.SelectRosterPlayer2:
+                if (GetIntPayload(payload) is int rosterPlayer2Id)
+                {
+                    SelectRosterPlayer(2, rosterPlayer2Id);
+                }
+                break;
+            case ScoreboardCommand.ClearRosterPlayer1:
+                ClearRosterPlayer(1);
+                break;
+            case ScoreboardCommand.ClearRosterPlayer2:
+                ClearRosterPlayer(2);
+                break;
         }
     }
 
@@ -681,6 +735,7 @@
         DbContext.SaveChanges();
         ResolvePlayers();
         StateHasChanged();
+        _ = BroadcastStateAsync();
     }
 
     private void OnRemoteCommand(ScoreboardCommand command, JsonElement? payload)
@@ -777,6 +832,7 @@
                 {
                     Current.ShotClockActive = false;
                     DbContext.SaveChanges();
+                    await BroadcastStateAsync();
                 }
                 await InvokeAsync(StateHasChanged);
             }
