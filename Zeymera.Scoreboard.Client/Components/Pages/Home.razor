@@ -37,7 +37,6 @@
                 <span class="ball white"></span>
                 <span class="ball red"></span>
             </div>
-            <span class="shot-clock-countdown @(Current.ShotClockActive && Current.ShotClockRemaining <= 10 ? "urgent" : "")">@ShotClockDisplaySeconds</span>
         </div>
     </header>
 
@@ -53,6 +52,10 @@
                     <img class="player-photo" src="@GetPhotoPath(1)" alt="" />
                 }
                 <span>@GetDisplayName(1)</span>
+                @if (Current.ActivePlayer == 1)
+                {
+                    <span class="current-points-badge">@Current.CurrentPoints</span>
+                }
             </div>
             <div class="player-score">@Current.Player1Score</div>
         </section>
@@ -64,8 +67,8 @@
             </div>
             <div class="center-divider"></div>
             <div class="center-row">
-                <span class="center-label">@L.T("Match")</span>
-                <span class="center-value">@Current.MatchTarget</span>
+                <span class="center-label">@L.T("ShotClock")</span>
+                <span class="center-value @(Current.ShotClockActive && Current.ShotClockRemaining <= 10 ? "urgent" : "")">@ShotClockDisplaySeconds</span>
             </div>
         </section>
 
@@ -80,6 +83,10 @@
                     <img class="player-photo" src="@GetPhotoPath(2)" alt="" />
                 }
                 <span>@GetDisplayName(2)</span>
+                @if (Current.ActivePlayer == 2)
+                {
+                    <span class="current-points-badge">@Current.CurrentPoints</span>
+                }
             </div>
             <div class="player-score yellow">@Current.Player2Score</div>
         </section>
@@ -95,8 +102,8 @@
             <span class="stat-value">@Current.Player1HighRun</span>
         </div>
         <div class="stat">
-            <span class="stat-label">@L.T("CurrentPoints")</span>
-            <span class="stat-value current">@Current.CurrentPoints</span>
+            <span class="stat-label">@L.T("Match")</span>
+            <span class="stat-value current">@Current.MatchTarget</span>
         </div>
         <div class="stat">
             <span class="stat-label">@L.T("BestAvg")</span>

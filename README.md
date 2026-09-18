@@ -8,7 +8,6 @@ A kiosk-style digital scoreboard for billiards, built on Blazor Server.
 |---|---|
 | `Zeymera.Scoreboard.Client` | The scoreboard display itself. Blazor Server app (net10.0), state persisted via EF Core/SQLite. This is what you run on the machine driving the screen. |
 | `Zeymera.Scoreboard.Api` | ASP.NET Core minimal API backed by PostgreSQL (EF Core) for players, teams, matches and match stats. |
-| `xxZeymera.Scoreboard.Clientxx` | Earlier prototype of the client, using localStorage/JS for persistence instead of EF Core. Kept for reference; not built or run anymore. |
 
 ## Running the scoreboard
 
@@ -51,10 +50,17 @@ The scoreboard accepts the same commands from three sources, all funneled throug
    {"command":"UpsertPlayer","payload":{"id":7,"nickname":"Hayri","name":"Hayri Ozler","photoBase64":"<base64 jpeg bytes>","photoExtension":"jpg"}}
    ```
 
+   **The instant a client connects**, before it sends anything, the server pushes a one-time state snapshot so the control app's UI can reflect the live game immediately instead of starting blank/stale:
+   ```json
+   {"type":"state","state":{"player1DisplayName":"Hayri","player2DisplayName":"Player 2","player1Score":13,"player2Score":11,"player1Avg":1.857,"player2Avg":1.571,"player1HighRun":5,"player2HighRun":3,"activePlayer":2,"currentPoints":0,"inning":7,"matchTarget":25,"shotClockActive":false,"shotClockRemaining":40,"shotClockSeconds":40}}
+   ```
+   Display names are already resolved (roster `Nickname`, falling back to `Name`, falling back to the free-typed name, falling back to `"Player 1"`/`"Player 2"`) — no need to separately resolve `Player1Id`/`Player2Id` against the roster. This is a one-time snapshot at connect time only, not a live subscription — the client won't be pushed further updates as the game progresses after that.
+
    Quick test from a browser console **on the scoreboard page itself** (a live circuit needs to be open for anything to receive the command — a bare `curl`/script connection with no rendered page won't do anything):
    ```js
    const ws = new WebSocket("ws://localhost:5288/ws");
    ws.onopen = () => console.log("connected");
+   ws.onmessage = (e) => console.log("received:", e.data); // first message is the state snapshot above
    ws.send(JSON.stringify({ command: "RenamePlayer1", payload: "Hayri" }));
    ws.send("IncrementPoints");
    ```
@@ -86,3 +92,4 @@ The match target itself (`Current.MatchTarget`, default 20 on a brand-new databa
 
 - `Services/WebSocketService.cs` in the Client project is an older outbound `ClientWebSocket` stub, superseded by the inbound `/ws` endpoint + `ScoreboardCommandHub` design above; currently unused.
 - No formal EF Core migrations — schema changes are patched in at startup in `Program.cs` (`CREATE TABLE IF NOT EXISTS` / `EnsureColumn`) since `Database.EnsureCreated()` is a no-op once the db file exists. Fine for now, but if the schema keeps growing, switching to real migrations would remove the need for this pattern.
+- The `/ws` state snapshot (see "Remote control input" above) is sent **once**, at connect time only. A control app that stays connected through the rest of the game currently has to infer state changes from the commands it itself sent — it won't be pushed live updates when the shot clock ticks, or when some other input source (keyboard, another control app) changes the score. Broadcasting state to all connected controllers on every change would be the natural next step if that's needed.

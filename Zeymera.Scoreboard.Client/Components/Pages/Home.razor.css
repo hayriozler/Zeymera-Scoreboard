@@ -67,18 +67,6 @@
     gap: 0.6vw;
 }
 
-.shot-clock-countdown {
-    font-size: clamp(1.8rem, 4.2vw, 3.2rem);
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    color: var(--white);
-    line-height: 1;
-}
-
-.shot-clock-countdown.urgent {
-    color: var(--red);
-}
-
 .ball {
     width: clamp(0.8rem, 1.6vw, 1.3rem);
     height: clamp(0.8rem, 1.6vw, 1.3rem);
@@ -162,18 +150,31 @@
     justify-content: center;
     gap: 0.5em;
     background: linear-gradient(180deg, var(--red) 0%, var(--red-dark) 100%);
-    padding: 0.7vh 0;
-    font-size: clamp(1rem, 2.1vw, 1.7rem);
+    padding: 1.3vh 0;
+    font-size: clamp(1.2rem, 2.6vw, 2.1rem);
     font-weight: 800;
     letter-spacing: 0.15em;
 }
 
 .player-photo {
-    width: clamp(1.4rem, 2.6vw, 2.2rem);
-    height: clamp(1.4rem, 2.6vw, 2.2rem);
+    width: clamp(1.9rem, 3.4vw, 3rem);
+    height: clamp(1.9rem, 3.4vw, 3rem);
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid var(--white);
+}
+
+.current-points-badge {
+    background: var(--white);
+    color: var(--red);
+    border-radius: 999px;
+    padding: 0.05em 0.6em;
+    font-size: 0.8em;
+    line-height: 1.5;
+    min-width: 1.6em;
+    text-align: center;
+    margin-left: auto;
+    margin-right: 1rem;
 }
 
 .turn-ball {
@@ -196,7 +197,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: clamp(6rem, 17vw, 16rem);
+    font-size: clamp(7rem, 18.5vw, 17.5rem);
     font-weight: 800;
     color: var(--white);
     line-height: 1;
@@ -240,6 +241,10 @@
 }
 
 .center-value.inning {
+    color: var(--red);
+}
+
+.center-value.urgent {
     color: var(--red);
 }
 
