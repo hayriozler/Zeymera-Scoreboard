@@ -95,7 +95,7 @@ app.MapRazorComponents<App>()
 const int maxControlMessageBytes = 16 * 1024 * 1024; // generous headroom for a base64-encoded player photo
 
 app.UseWebSockets();
-app.Map("/ws/control", async (HttpContext context, ScoreboardCommandHub hub) =>
+app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub) =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {

@@ -147,6 +147,11 @@
                 <button @onclick="() => Adjust((s=> Current.Inning++))">+</button>
             </div>
             <div class="control-group">
+                <span>@L.T("Match")</span>
+                <input type="number" min="1" value="@Current.MatchTarget"
+                       @onchange="e => SetMatchTarget(e.Value?.ToString())" />
+            </div>
+            <div class="control-group">
                 <span>@L.T("CurrentPoints")</span>
                 <button @onclick="() => Adjust((s=> Current.CurrentPoints--))">-</button>
                 <button @onclick="() => Adjust((s=> Current.CurrentPoints++))">+</button>
@@ -382,6 +387,20 @@
         Persist();
     }
 
+    private void SetMatchTarget(string? value)
+    {
+        if (int.TryParse(value, out var target))
+        {
+            SetMatchTarget(target);
+        }
+    }
+
+    private void SetMatchTarget(int target)
+    {
+        Current.MatchTarget = Math.Max(1, target);
+        Persist();
+    }
+
     private void StopShotClock()
     {
         Current?.ShotClockActive = false;
@@ -576,11 +595,20 @@
             case ScoreboardCommand.NewGame:
                 NewGame();
                 break;
+            case ScoreboardCommand.SetMatchTarget:
+                if (GetIntPayload(payload) is int matchTarget)
+                {
+                    SetMatchTarget(matchTarget);
+                }
+                break;
         }
     }
 
     private static string? GetStringPayload(JsonElement? payload) =>
         payload?.ValueKind == JsonValueKind.String ? payload.Value.GetString() : null;
+
+    private static int? GetIntPayload(JsonElement? payload) =>
+        payload?.ValueKind == JsonValueKind.Number && payload.Value.TryGetInt32(out var value) ? value : null;
 
     private void UpsertPlayerFromPayload(JsonElement? payload)
     {

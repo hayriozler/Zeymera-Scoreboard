@@ -15,4 +15,5 @@ public enum ScoreboardCommand
     UpsertPlayer,
     EndGame,
     NewGame,
+    SetMatchTarget,
 }

@@ -38,12 +38,13 @@ Click anywhere on the board to enter fullscreen kiosk mode.
 The scoreboard accepts the same commands from three sources, all funneled through `Home.razor`'s `ApplyCommand`:
 
 1. **Keyboard**, as above.
-2. **WebSocket** — a control app connects to `ws://<host>:<port>/ws/control` and sends a JSON envelope as a UTF-8 text frame:
+2. **WebSocket** — a control app connects to `ws://<host>:<port>/ws` and sends a JSON envelope as a UTF-8 text frame:
    ```json
    {"command":"IncrementPoints"}
    {"command":"RenamePlayer1","payload":"Hayri"}
+   {"command":"SetMatchTarget","payload":40}
    ```
-   `command` is one of the `ScoreboardCommand` enum names (case-insensitive): `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `RenamePlayer1`, `RenamePlayer2`, `UpsertPlayer`, `EndGame`, `NewGame`. `payload` is optional: a plain string for the two rename commands, a structured object for `UpsertPlayer` (see below), and ignored by every other command. For backward compatibility the endpoint also still accepts a bare command name with no payload, e.g. just the text `IncrementPoints`.
+   `command` is one of the `ScoreboardCommand` enum names (case-insensitive): `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `RenamePlayer1`, `RenamePlayer2`, `UpsertPlayer`, `EndGame`, `NewGame`, `SetMatchTarget`. `payload` is optional: a plain string for the two rename commands, a number for `SetMatchTarget`, a structured object for `UpsertPlayer` (see below), and ignored by every other command. For backward compatibility the endpoint also still accepts a bare command name with no payload, e.g. just the text `IncrementPoints`.
 
    `UpsertPlayer` adds or updates a row in the local `player` roster (see "Player roster" below) — the photo is optional and only needs sending when it changes:
    ```json
@@ -52,7 +53,7 @@ The scoreboard accepts the same commands from three sources, all funneled throug
 
    Quick test from a browser console **on the scoreboard page itself** (a live circuit needs to be open for anything to receive the command — a bare `curl`/script connection with no rendered page won't do anything):
    ```js
-   const ws = new WebSocket("ws://localhost:5288/ws/control");
+   const ws = new WebSocket("ws://localhost:5288/ws");
    ws.onopen = () => console.log("connected");
    ws.send(JSON.stringify({ command: "RenamePlayer1", payload: "Hayri" }));
    ws.send("IncrementPoints");
@@ -73,13 +74,15 @@ The `player` table (SQLite, same database as the scoreboard state) is a local ro
 Ending a match is two separate steps, both in the controls overlay:
 
 - **"End Game"** snapshots the current game into the `match_result` table — date/time played, both players' display names (a copy, not just a `PlayerId` reference, so history stays readable even if that roster player is later renamed or deleted), scores, averages, high runs, innings played, the match target, and the winner. It does **not** reset the board — the final score stays on screen (e.g. for a photo/announcement).
-- **"New Game"** (confirms before proceeding) resets the board for the next match. It does **not** save anything — press "End Game" first if the current match's stats should be kept.
+- **"New Game"** resets the board for the next match. It does **not** save anything — press "End Game" first if the current match's stats should be kept. `MatchTarget` is preserved across "New Game" (it's treated as a match-format setting, not per-game state).
 
 View history at **`/matches`**, linked from the controls overlay, with the winner's name highlighted.
 
-Both are also `ScoreboardCommand`s (`EndGame`, `NewGame`), so either can be triggered remotely over WebSocket/Bluetooth as well as the on-screen buttons — a remote `NewGame` skips the local confirmation dialog (the calling app is expected to confirm on its own end).
+Both are also `ScoreboardCommand`s (`EndGame`, `NewGame`), so either can be triggered remotely over WebSocket/Bluetooth as well as the on-screen buttons. Neither has a confirmation dialog — both fire immediately, locally or remotely.
+
+The match target itself (`Current.MatchTarget`, default 20 on a brand-new database) can be edited directly in the controls overlay, or set remotely with `SetMatchTarget` (see above).
 
 ## Known gaps
 
-- `Services/WebSocketService.cs` in the Client project is an older outbound `ClientWebSocket` stub, superseded by the inbound `/ws/control` endpoint + `ScoreboardCommandHub` design above; currently unused.
+- `Services/WebSocketService.cs` in the Client project is an older outbound `ClientWebSocket` stub, superseded by the inbound `/ws` endpoint + `ScoreboardCommandHub` design above; currently unused.
 - No formal EF Core migrations — schema changes are patched in at startup in `Program.cs` (`CREATE TABLE IF NOT EXISTS` / `EnsureColumn`) since `Database.EnsureCreated()` is a no-op once the db file exists. Fine for now, but if the schema keeps growing, switching to real migrations would remove the need for this pattern.
