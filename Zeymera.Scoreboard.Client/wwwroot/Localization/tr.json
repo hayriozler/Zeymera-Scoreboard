@@ -18,6 +18,5 @@
   "Player2Label": "Oyuncu 2",
   "ChoosePlayer": "Oyuncu seç...",
   "ActivePlayer": "Aktif Oyuncu",
-  "Add": "Ekle",
-  "ControlsHint": "Kontrolleri gizlemek için C, süreyi başlatmak/durdurmak için T, sıfırlamak için R. Aktif oyuncuyu değiştirmek için 1/2, mevcut sayıyı ayarlamak için +/-, skora eklemek için Enter."
+  "ControlsHint": "Kontrolleri gizlemek için C, süreyi başlatmak/durdurmak için T, sıfırlamak için R. Aktif oyuncuyu değiştirmek için 1/2, mevcut sayıyı ayarlamak için +/-."
 }

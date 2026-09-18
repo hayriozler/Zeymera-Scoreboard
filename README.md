@@ -30,7 +30,6 @@ Click anywhere on the board to enter fullscreen kiosk mode.
 | `1` / `2` | Set active player |
 | `P` | Open the player picker for whichever player is currently active |
 | `+` / `-` | Adjust the current-points counter |
-| `Enter` | Commit current points to the active player and hand off the turn |
 
 ## Remote control input
 
@@ -43,7 +42,7 @@ The scoreboard accepts the same commands from three sources, all funneled throug
 
    | Payload | Commands |
    |---|---|
-   | *(none)* | `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `IncrementPlayer1Score`, `DecrementPlayer1Score`, `IncrementPlayer2Score`, `DecrementPlayer2Score`, `IncrementInning`, `DecrementInning`, `ClearRosterPlayer1`, `ClearRosterPlayer2`, `EndGame`, `NewGame` |
+   | *(none)* | `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `IncrementPlayer1Score`, `DecrementPlayer1Score`, `IncrementPlayer2Score`, `DecrementPlayer2Score`, `IncrementInning`, `ClearRosterPlayer1`, `ClearRosterPlayer2`, `EndGame`, `NewGame` |
    | string | `RenamePlayer1`, `RenamePlayer2` — the free-typed name |
    | number | `SetMatchTarget` — the target score; `SelectRosterPlayer1`, `SelectRosterPlayer2` — a roster player's `Id` to link to that slot |
    | object | `UpsertPlayer` — see below |
@@ -54,6 +53,8 @@ The scoreboard accepts the same commands from three sources, all funneled throug
    {"command":"SetMatchTarget","payload":40}
    {"command":"SelectRosterPlayer1","payload":7}
    ```
+
+   Every score/inning change saves immediately — there's no separate "commit" step. `Inning` follows one rule: it auto-increments whenever Player 1 (the white ball) scores (`IncrementPlayer1Score`), and otherwise only moves via the manual `IncrementInning` correction. It never decrements — a mis-scored point is fixed with `DecrementPlayer1Score`/`DecrementPlayer2Score`, not by rolling the inning back.
 
    `UpsertPlayer` adds or updates a row in the local `player` roster (see "Player roster" below) — the photo is optional and only needs sending when it changes:
    ```json

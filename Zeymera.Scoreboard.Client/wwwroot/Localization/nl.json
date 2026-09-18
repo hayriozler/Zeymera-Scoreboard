@@ -18,6 +18,5 @@
   "Player2Label": "Speler 2",
   "ChoosePlayer": "Kies speler...",
   "ActivePlayer": "Actieve Speler",
-  "Add": "Toevoegen",
-  "ControlsHint": "Druk op C om te verbergen, T om de speeltijd te starten/stoppen, R om te resetten. Druk op 1/2 om van actieve speler te wisselen, +/- om de huidige punten aan te passen, Enter om ze aan de score toe te voegen."
+  "ControlsHint": "Druk op C om te verbergen, T om de speeltijd te starten/stoppen, R om te resetten. Druk op 1/2 om van actieve speler te wisselen, +/- om de huidige punten aan te passen."
 }

@@ -140,18 +140,17 @@
             </div>
             <div class="control-group">
                 <span>@L.T("P1Score")</span>
-                <button @onclick="() => Adjust((s=> Current.Player1Score--))">-</button>
-                <button @onclick="() => Adjust((s=> Current.Player1Score++))">+</button>
+                <button @onclick="DecrementPlayer1Score">-</button>
+                <button @onclick="IncrementPlayer1Score">+</button>
             </div>
             <div class="control-group">
                 <span>@L.T("P2Score")</span>
-                <button @onclick="() => Adjust((s=> Current.Player2Score--))">-</button>
-                <button @onclick="() => Adjust((s=> Current.Player2Score++))">+</button>
+                <button @onclick="DecrementPlayer2Score">-</button>
+                <button @onclick="IncrementPlayer2Score">+</button>
             </div>
             <div class="control-group">
                 <span>@L.T("Inning")</span>
-                <button @onclick="() => Adjust((s=> Current.Inning--))">-</button>
-                <button @onclick="() => Adjust((s=> Current.Inning++))">+</button>
+                <button @onclick="IncrementInning">+</button>
             </div>
             <div class="control-group">
                 <span>@L.T("Match")</span>
@@ -162,7 +161,6 @@
                 <span>@L.T("CurrentPoints")</span>
                 <button @onclick="() => Adjust((s=> Current.CurrentPoints--))">-</button>
                 <button @onclick="() => Adjust((s=> Current.CurrentPoints++))">+</button>
-                <button @onclick="CommitCurrentPoints">@L.T("Add")</button>
             </div>
             <div class="control-group">
                 <span>@L.T("ActivePlayer")</span>
@@ -467,29 +465,47 @@
 
     private int ShotClockDisplaySeconds => (int)Math.Ceiling(Current?.ShotClockRemaining ?? 0);
 
-    private void CommitCurrentPoints() 
+    private void RecalculateAverages()
     {
-        if (Current is null) return;
-        var points = Current.CurrentPoints;
-
-        if (Current.ActivePlayer == 2)
-        {
-            Current.Player2Score += points;
-            Current.Player2HighRun = Math.Max(Current.Player2HighRun, points);
-            Current.ActivePlayer = 1;
-            Current.Inning++; // both players have now taken their shot this round
-        }
-        else
-        {
-            Current.Player1Score += points;
-            Current.Player1HighRun = Math.Max(Current.Player1HighRun, points);
-            Current.ActivePlayer = 2;
-        }
-
         Current.Player1Avg = Current.Inning > 0 ? (double)Current.Player1Score / Current.Inning : 0;
         Current.Player2Avg = Current.Inning > 0 ? (double)Current.Player2Score / Current.Inning : 0;
+    }
 
-        Current.CurrentPoints = 0;
+    /// <summary>White ball scored - per the house rule, this is what advances the inning count.</summary>
+    private void IncrementPlayer1Score()
+    {
+        Current.Player1Score++;
+        Current.Inning++;
+        RecalculateAverages();
+        Persist();
+    }
+
+    private void DecrementPlayer1Score()
+    {
+        Current.Player1Score--;
+        RecalculateAverages();
+        Persist();
+    }
+
+    private void IncrementPlayer2Score()
+    {
+        Current.Player2Score++;
+        RecalculateAverages();
+        Persist();
+    }
+
+    private void DecrementPlayer2Score()
+    {
+        Current.Player2Score--;
+        RecalculateAverages();
+        Persist();
+    }
+
+    /// <summary>Manual correction only - inning otherwise advances automatically when white (Player 1) scores.</summary>
+    private void IncrementInning()
+    {
+        Current.Inning++;
+        RecalculateAverages();
         Persist();
     }
 
@@ -564,7 +580,6 @@
             "2" => ScoreboardCommand.SelectPlayer2,
             "+" or "=" => ScoreboardCommand.IncrementPoints,
             "-" or "_" => ScoreboardCommand.DecrementPoints,
-            "Enter" => ScoreboardCommand.CommitPoints,
             _ => null
         };
 
@@ -601,9 +616,6 @@
             case ScoreboardCommand.DecrementPoints:
                 Adjust(s => s.CurrentPoints--);
                 break;
-            case ScoreboardCommand.CommitPoints:
-                CommitCurrentPoints();
-                break;
 
             case ScoreboardCommand.RenamePlayer1:
                 SetPlayerName(1, GetStringPayload(payload));
@@ -627,22 +639,19 @@
                 }
                 break;
             case ScoreboardCommand.IncrementPlayer1Score:
-                Adjust(s => s.Player1Score++);
+                IncrementPlayer1Score();
                 break;
             case ScoreboardCommand.DecrementPlayer1Score:
-                Adjust(s => s.Player1Score--);
+                DecrementPlayer1Score();
                 break;
             case ScoreboardCommand.IncrementPlayer2Score:
-                Adjust(s => s.Player2Score++);
+                IncrementPlayer2Score();
                 break;
             case ScoreboardCommand.DecrementPlayer2Score:
-                Adjust(s => s.Player2Score--);
+                DecrementPlayer2Score();
                 break;
             case ScoreboardCommand.IncrementInning:
-                Adjust(s => s.Inning++);
-                break;
-            case ScoreboardCommand.DecrementInning:
-                Adjust(s => s.Inning--);
+                IncrementInning();
                 break;
             case ScoreboardCommand.SelectRosterPlayer1:
                 if (GetIntPayload(payload) is int rosterPlayer1Id)

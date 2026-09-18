@@ -18,6 +18,5 @@
   "Player2Label": "Player 2",
   "ChoosePlayer": "Choose player...",
   "ActivePlayer": "Active Player",
-  "Add": "Add",
-  "ControlsHint": "Press C to hide, T to start/stop the shot clock, R to reset it. Press 1/2 to switch the active player, +/- to adjust the current points, Enter to add them to the score."
+  "ControlsHint": "Press C to hide, T to start/stop the shot clock, R to reset it. Press 1/2 to switch the active player, +/- to adjust the current points."
 }
