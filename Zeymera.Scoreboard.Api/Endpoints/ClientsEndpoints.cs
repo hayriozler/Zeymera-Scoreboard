@@ -12,25 +12,44 @@ public static class ClientsEndpoints
     {
         var group = app.MapGroup("/api/clients").WithTags("Clients");
 
-        group.MapGet("/", async (ScoreboardDbContext db) =>
-            await db.ClientSet
+        group.MapGet("/", async (ScoreboardDbContext db, int? customerId) =>
+        {
+            var query = db.ClientSet.AsQueryable();
+            if (customerId is not null)
+            {
+                query = query.Where(c => c.CustomerId == customerId);
+            }
+
+            return await query
                 .OrderBy(c => c.CreatedAt)
-                .Select(c => new ClientDto(c.Id, c.Name, c.CreatedAt, c.LastSeenAt))
-                .ToListAsync());
+                .Select(c => new ClientDto(c.Id, c.Name, c.CustomerId, c.TableNumber, c.CreatedAt, c.LastSeenAt))
+                .ToListAsync();
+        });
 
         group.MapPost("/", async (RegisterClientRequest request, ScoreboardDbContext db) =>
         {
+            if (request.CustomerId is not null && await db.CustomerSet.FindAsync(request.CustomerId) is null)
+            {
+                return Results.BadRequest("Customer does not exist.");
+            }
+
             string code;
             do
             {
                 code = ClientCodeGenerator.Generate();
             } while (await db.ClientSet.AnyAsync(c => c.Id == code));
 
-            var client = new Client { Id = code, Name = request.Name?.Trim() };
+            var client = new Client
+            {
+                Id = code,
+                Name = request.Name?.Trim(),
+                CustomerId = request.CustomerId,
+                TableNumber = request.TableNumber
+            };
             db.ClientSet.Add(client);
             await db.SaveChangesAsync();
 
-            return Results.Created($"/api/clients/{client.Id}", new ClientDto(client.Id, client.Name, client.CreatedAt, client.LastSeenAt));
+            return Results.Created($"/api/clients/{client.Id}", new ClientDto(client.Id, client.Name, client.CustomerId, client.TableNumber, client.CreatedAt, client.LastSeenAt));
         });
 
         group.MapDelete("/{id}", async (string id, ScoreboardDbContext db) =>

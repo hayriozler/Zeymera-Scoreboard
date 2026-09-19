@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Serilog;
+using Serilog.Events;
 using System.Net.WebSockets;
 using System.Text;
 using Zeymera.Scoreboard.Client.Components;
@@ -6,6 +8,42 @@ using Zeymera.Scoreboard.Client.Models;
 using Zeymera.Scoreboard.Client.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var logsFolder = Path.Combine(Directory.GetCurrentDirectory(), "logs");
+Directory.CreateDirectory(logsFolder);
+
+var logLevelSection = builder.Configuration.GetSection("Logging:LogLevel");
+var loggerConfig = new LoggerConfiguration()
+    .MinimumLevel.Is(ParseLogLevel(logLevelSection["Default"]))
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        Path.Combine(logsFolder, "scoreboard-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}{NewLine}    {Message:lj}{NewLine}{Exception}");
+
+foreach (var category in logLevelSection.GetChildren())
+{
+    if (category.Key != "Default")
+    {
+        loggerConfig = loggerConfig.MinimumLevel.Override(category.Key, ParseLogLevel(category.Value));
+    }
+}
+
+Log.Logger = loggerConfig.CreateLogger();
+builder.Host.UseSerilog();
+
+static LogEventLevel ParseLogLevel(string? value) => value?.ToLowerInvariant() switch
+{
+    "trace" => LogEventLevel.Verbose,
+    "debug" => LogEventLevel.Debug,
+    "warning" => LogEventLevel.Warning,
+    "error" => LogEventLevel.Error,
+    "critical" => LogEventLevel.Fatal,
+    "none" => LogEventLevel.Fatal + 1,
+    _ => LogEventLevel.Information,
+};
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -23,8 +61,12 @@ var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7153/
 builder.Services.AddDbContextFactory<DataContext>(options => options.UseSqlite($"Data Source={dbName}"));
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 builder.Services.AddScoped<LocalizationService>();
+builder.Services.AddScoped<BluetoothService>();
 builder.Services.AddSingleton<WebSocketService>();
 builder.Services.AddSingleton<ScoreboardCommandHub>();
+builder.Services.Configure<RemoteSyncOptions>(builder.Configuration.GetSection("RemoteSync"));
+builder.Services.AddHttpClient(nameof(RemoteSyncService));
+builder.Services.AddHostedService<RemoteSyncService>();
 
 var app = builder.Build();
 app.UseAntiforgery();
@@ -63,7 +105,9 @@ using (var scope = app.Services.CreateScope())
             Id INTEGER PRIMARY KEY,
             Nickname TEXT NOT NULL,
             Name TEXT NOT NULL DEFAULT '',
-            PhotoPath TEXT NULL
+            PhotoPath TEXT NULL,
+            AvatarId INTEGER NULL,
+            Synced INTEGER NOT NULL DEFAULT 0
         );
         """);
 
@@ -95,7 +139,7 @@ app.MapRazorComponents<App>()
 const int maxControlMessageBytes = 16 * 1024 * 1024; // generous headroom for a base64-encoded player photo
 
 app.UseWebSockets();
-app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextFactory<DataContext> dbFactory) =>
+app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, ILogger<Program> logger) =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
@@ -103,21 +147,13 @@ app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextF
         return;
     }
 
+    var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
     using var socket = await context.WebSockets.AcceptWebSocketAsync();
-    hub.ControllerConnected(socket);
+    logger.LogInformation("WS connected: {RemoteIp}", remoteIp);
+    hub.ControllerConnected(socket, remoteIp);
     try
     {
-        await using (var db = await dbFactory.CreateDbContextAsync(context.RequestAborted))
-        {
-            var snapshot = await BuildSnapshotAsync(db);
-            if (snapshot is not null)
-            {
-                var stateJson = ScoreboardStateSnapshotFactory.ToWireJson(snapshot);
-                if (socket.State == WebSocketState.Open)
-                    await socket.SendAsync(Encoding.UTF8.GetBytes(stateJson), WebSocketMessageType.Text, true, context.RequestAborted);
-            }
-        }
-
         var buffer = new byte[8192];
         while (socket.State == WebSocketState.Open)
         {
@@ -137,6 +173,7 @@ app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextF
                 messageStream.Write(buffer, 0, result.Count);
                 if (messageStream.Length > maxControlMessageBytes)
                 {
+                    logger.LogWarning("Message from {RemoteIp} exceeded {MaxBytes} bytes - closing connection", remoteIp, maxControlMessageBytes);
                     await socket.CloseAsync(WebSocketCloseStatus.MessageTooBig, "message too large", CancellationToken.None);
                     closed = true;
                     break;
@@ -145,43 +182,41 @@ app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, IDbContextF
 
             if (closed)
             {
+                logger.LogInformation("WS closed by {RemoteIp}", remoteIp);
                 break;
             }
 
+            var seq = hub.NextSequence();
             var text = Encoding.UTF8.GetString(messageStream.ToArray());
-            var message = ScoreboardCommandParser.TryParse(text);
-            if (message is not null)
+            logger.LogInformation("[#{Seq}] RECV from {RemoteIp}: {Text}", seq, remoteIp, text);
+
+            var messages = ScoreboardCommandParser.TryParse(text);
+            if (messages.Count > 0)
             {
-                hub.Publish(message.Command, message.Payload);
+                logger.LogInformation("[#{Seq}] Parsed {Count} command(s) from {RemoteIp}: {Commands}", seq, messages.Count, remoteIp, string.Join(", ", messages.Select(m => m.Command)));
+                hub.Publish(messages);
+            }
+            else
+            {
+                logger.LogWarning("[#{Seq}] Could not parse any command from {RemoteIp}: {Text}", seq, remoteIp, text);
             }
         }
     }
     catch (OperationCanceledException)
     {
         // control device dropped the connection without a clean close handshake (tab closed, network loss, etc.)
+        logger.LogInformation("WS connection from {RemoteIp} cancelled (dropped without a close handshake)", remoteIp);
     }
-    catch (WebSocketException)
+    catch (WebSocketException ex)
     {
         // ditto - abrupt disconnect at the socket level
+        logger.LogWarning(ex, "WS connection from {RemoteIp} ended abruptly", remoteIp);
     }
     finally
     {
         hub.ControllerDisconnected(socket);
+        logger.LogInformation("WS disconnected: {RemoteIp}", remoteIp);
     }
 });
 
 app.Run();
-
-static async Task<ScoreboardStateSnapshot?> BuildSnapshotAsync(DataContext db)
-{
-    var state = await db.ScoreboardStates.FirstOrDefaultAsync(s => s.Id == 1);
-    if (state is null)
-    {
-        return null;
-    }
-
-    var player1 = state.Player1Id is int id1 ? await db.Players.FirstOrDefaultAsync(p => p.Id == id1) : null;
-    var player2 = state.Player2Id is int id2 ? await db.Players.FirstOrDefaultAsync(p => p.Id == id2) : null;
-
-    return ScoreboardStateSnapshotFactory.Create(state, player1, player2);
-}

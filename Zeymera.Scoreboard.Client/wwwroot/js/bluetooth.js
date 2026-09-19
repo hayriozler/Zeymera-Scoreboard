@@ -3,7 +3,7 @@
 // used here. This targets the Nordic UART Service convention commonly used
 // by ESP32/Arduino BLE projects. Replace the UUIDs below to match your
 // remote's firmware. Each notification's UTF-8 text is forwarded as-is to
-// C# (OnBluetoothCommand), which accepts either a bare command name (e.g.
+// C# (OnCommand), which accepts either a bare command name (e.g.
 // "IncrementPoints") or the same JSON envelope the WebSocket control channel
 // uses, e.g. {"command":"UpsertPlayer","payload":{"id":1,"nickname":"..."}} -
 // see ScoreboardCommandParser.cs for the exact format. Note a full player
@@ -31,7 +31,7 @@ export async function connect(dotNetRef) {
 
     device.addEventListener("gattserverdisconnected", () => {
         characteristic = null;
-        dotNetRef.invokeMethodAsync("OnBluetoothDisconnected");
+        dotNetRef.invokeMethodAsync("OnDisconnected");
     });
 
     const server = await device.gatt.connect();
@@ -42,11 +42,11 @@ export async function connect(dotNetRef) {
     characteristic.addEventListener("characteristicvaluechanged", (event) => {
         const value = new TextDecoder("utf-8").decode(event.target.value).trim();
         if (value) {
-            dotNetRef.invokeMethodAsync("OnBluetoothCommand", value);
+            dotNetRef.invokeMethodAsync("OnCommand", value);
         }
     });
 
-    dotNetRef.invokeMethodAsync("OnBluetoothConnected", device.name ?? "BLE remote");
+    dotNetRef.invokeMethodAsync("OnConnected", device.name ?? "BLE remote");
 }
 
 export function disconnect() {

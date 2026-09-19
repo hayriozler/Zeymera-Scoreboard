@@ -7,7 +7,7 @@ A kiosk-style digital scoreboard for billiards, built on Blazor Server.
 | Project | What it is |
 |---|---|
 | `Zeymera.Scoreboard.Client` | The scoreboard display itself. Blazor Server app (net10.0), state persisted via EF Core/SQLite. This is what you run on the machine driving the screen. |
-| `Zeymera.Scoreboard.Api` | ASP.NET Core minimal API backed by PostgreSQL (EF Core) for players, teams, matches and match stats. |
+| `Zeymera.Scoreboard.Api` | ASP.NET Core minimal API backed by PostgreSQL (EF Core). Receives what a kiosk's `RemoteSyncService` pushes it — clients, players, match stats — see "Remote data push" below. |
 
 ## Running the scoreboard
 
@@ -33,28 +33,36 @@ Click anywhere on the board to enter fullscreen kiosk mode.
 
 ## Remote control input
 
-The scoreboard accepts the same commands from three sources, all funneled through `Home.razor`'s `ApplyCommand`:
+The scoreboard accepts the same commands from three sources. Every one of them ends up calling `Home.razor`'s `ApplyCommandsAsync` with a list of one or more `ScoreboardCommandMessage`s — that's the *only* place that ever saves to the database or broadcasts, applying every command in the list first and persisting/broadcasting exactly once at the end, regardless of how many commands arrived together. The on-screen buttons dispatch through this same path too (via a small `DispatchAsync(command, payload)` helper) rather than mutating state directly, so a button click and a remote command behave identically.
 
-1. **Keyboard**, as above.
-2. **WebSocket** — a control app connects to `ws://<host>:<port>/ws` and sends a JSON envelope as a UTF-8 text frame: `{"command":"...", "payload": ...}`. For backward compatibility the endpoint also still accepts a bare command name with no payload as plain text, e.g. just `IncrementPoints`.
+1. **Keyboard**, as above — each keypress becomes a one-command list.
+2. **WebSocket** — a control app connects to `ws://<host>:<port>/ws` and sends a JSON envelope as a UTF-8 text frame. `Models/ScoreboardCommandParser.cs` accepts three shapes:
+
+   - **Single command**: `{"command":"...", "payload": ...}`.
+   - **Multiple commands in one message** — put them in a `commands` array instead, applied in array order: `{"commands":[{"command":"..."},{"command":"...","payload":...}]}`. This is the recommended shape for a control app, since it always looks the same whether you're sending one command or several, and it guarantees the board only saves/broadcasts once for the whole message instead of once per command.
+   - **Bare command name** with no payload, as plain (non-JSON) text — e.g. just `IncrementPoints`.
+
+   A message that doesn't match any of these (wrong field names, an unrecognized command name, etc.) is silently dropped rather than guessed at — earlier versions of this parser deserialized straight into the command record, so a mismatched shape like `{"type":"...","value":...}` (no `"command"` field) would silently resolve to `ToggleControls`, the first `ScoreboardCommand` enum member, instead of doing nothing. Within a `commands` array, one invalid entry is skipped, not a reason to reject the rest.
 
    **Command reference** (`command` is a `ScoreboardCommand` enum name, case-insensitive):
 
    | Payload | Commands |
    |---|---|
-   | *(none)* | `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `IncrementPlayer1Score`, `DecrementPlayer1Score`, `IncrementPlayer2Score`, `DecrementPlayer2Score`, `IncrementInning`, `ClearRosterPlayer1`, `ClearRosterPlayer2`, `EndGame`, `NewGame` |
+   | *(none)* | `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `ClearRosterPlayer1`, `ClearRosterPlayer2`, `EndGame`, `NewGame` |
+   | number | `AdjustPoints` — the absolute tally value, not a delta (see below); `SetMatchTarget` — the target score; `SelectRosterPlayer1`, `SelectRosterPlayer2` — a roster player's `Id` to link to that slot |
    | string | `RenamePlayer1`, `RenamePlayer2` — the free-typed name |
-   | number | `SetMatchTarget` — the target score; `SelectRosterPlayer1`, `SelectRosterPlayer2` — a roster player's `Id` to link to that slot |
    | object | `UpsertPlayer` — see below |
 
    ```json
    {"command":"IncrementPoints"}
+   {"command":"AdjustPoints","payload":3}
    {"command":"RenamePlayer1","payload":"Hayri"}
    {"command":"SetMatchTarget","payload":40}
    {"command":"SelectRosterPlayer1","payload":7}
+   {"commands":[{"command":"SelectPlayer1"},{"command":"AdjustPoints","payload":3},{"command":"CommitPoints"}]}
    ```
 
-   Every score/inning change saves immediately — there's no separate "commit" step. `Inning` follows one rule: it auto-increments whenever Player 1 (the white ball) scores (`IncrementPlayer1Score`), and otherwise only moves via the manual `IncrementInning` correction. It never decrements — a mis-scored point is fixed with `DecrementPlayer1Score`/`DecrementPlayer2Score`, not by rolling the inning back.
+   There's a single score input, not one per player: the "Current Points" counter (`IncrementPoints`/`DecrementPoints`/`AdjustPoints`) always applies to whichever player is currently active (`ActivePlayer`, set via `SelectPlayer1`/`SelectPlayer2`). Despite the name, `AdjustPoints` takes the tally's **absolute value**, not a delta — send `payload: 3` to mean "the tally is 3", not "add 3" (the command name predates this and was kept as-is to avoid a breaking change for existing remotes). This is deliberate: a remote that tracks its own running tally and pushes it on every change is far more resilient to a flaky connection than one that sends deltas — a lost or duplicated absolute update self-corrects on the next message, while a lost delta permanently desyncs the two sides. It only tallies a pending count — nothing is written to a real score until `CommitPoints` (Enter key, or the on-screen "Add" button) applies that tally to the active player's score, updates their high run, resets the counter to 0, hands the turn to the other player, and — only when Player 1 was the active player — advances `Inning`. `Inning` never decrements; correct a bad tally before committing it with `DecrementPoints`/`AdjustPoints`, not by rolling the inning back after the fact.
 
    `UpsertPlayer` adds or updates a row in the local `player` roster (see "Player roster" below) — the photo is optional and only needs sending when it changes:
    ```json
@@ -81,11 +89,15 @@ The scoreboard accepts the same commands from three sources, all funneled throug
    await SendCommandAsync("SetMatchTarget", 40);
    ```
 
-   **Receiving state** — the instant a client connects, before it sends anything, and again after **every** subsequent change to the board (from any source — this client, another connected client, the keyboard, the on-screen controls), the server pushes:
+   **Receiving state** — the server does **not** push anything the instant a client connects; connecting only opens the socket. After **every** change to the board (from any source — this client, another connected client, the keyboard, the on-screen controls) it pushes a snapshot to every connected client, and a client can also explicitly ask for one at any time (e.g. right after connecting, once it's actually ready to handle the reply) with the no-payload `GetState` command:
    ```json
-   {"type":"state","state":{"player1DisplayName":"Hayri","player2DisplayName":"Player 2","player1Score":13,"player2Score":11,"player1Avg":1.857,"player2Avg":1.571,"player1HighRun":5,"player2HighRun":3,"activePlayer":2,"currentPoints":0,"inning":7,"matchTarget":25,"shotClockActive":false,"shotClockSeconds":40}}
+   {"commands":[{"command":"GetState"}]}
    ```
-   Display names are already resolved (roster `Nickname`, falling back to `Name`, falling back to the free-typed name, falling back to `"Player 1"`/`"Player 2"`) — no need to separately resolve `Player1Id`/`Player2Id` against the roster. A well-behaved client should treat this push, not its own sent commands, as the source of truth for what to render — check `type == "state"` on every received message and refresh the UI from `state`.
+   `{"type":"state","commands":[]}` — an empty `commands` array alongside `"type":"state"` — is also accepted as a `GetState` request, since that's the shape some clients send. Either way, what comes back looks like this — broadcast to **every** connected client, not just the one that asked:
+   ```json
+   {"type":"state","state":{"player1DisplayName":"Hayri","player2DisplayName":"Player 2","player1Score":13,"player2Score":11,"player1Avg":1.857,"player2Avg":1.571,"player1HighRun":5,"player2HighRun":3,"activePlayer":2,"currentPoints":0,"inning":7,"matchTarget":25,"shotClockActive":false,"shotClockSeconds":40,"shotClockRemaining":40}}
+   ```
+   Display names are already resolved (roster `Nickname`, falling back to `Name`, falling back to the free-typed name, falling back to `"Player 1"`/`"Player 2"`) — no need to separately resolve `Player1Id`/`Player2Id` against the roster. A well-behaved client should treat this push, not its own sent commands, as the source of truth for what to render — check `type == "state"` on every received message and refresh the UI from `state`. This request/response design (over auto-pushing on connect) exists specifically so a client isn't racing its own message-handler setup against the server's connect-time push — it asks only once it's actually ready.
 
    Quick test from a browser console **on the scoreboard page itself** (a live circuit needs to be open for anything to receive the command — a bare `curl`/script connection with no rendered page won't do anything):
    ```js
@@ -94,6 +106,7 @@ The scoreboard accepts the same commands from three sources, all funneled throug
    ws.onmessage = (e) => console.log("received:", e.data); // state snapshot, on connect and after every change
    ws.send(JSON.stringify({ command: "RenamePlayer1", payload: "Hayri" }));
    ws.send("IncrementPoints");
+   ws.send(JSON.stringify({ commands: [{ command: "SelectPlayer1" }, { command: "AdjustPoints", payload: 3 }, { command: "CommitPoints" }] }));
    ```
    The sync-dot on the board reflects whether a control connection is currently active.
 3. **Bluetooth (Web Bluetooth)** — "Pair remote" in the controls overlay connects to a BLE peripheral over `wwwroot/js/bluetooth.js`. This only works against a **custom** GATT service; browsers block the standard HID-over-GATT profile, so a generic BLE pedal/keyboard won't pair this way (pair it at the OS level instead — it'll fire keydown events, which are already wired up). The remote sends the exact same envelope as the WebSocket channel (bare command name or the JSON form). Note a full player photo is a lot of data for typical BLE notify MTU sizes — that payload is realistically better suited to the WebSocket channel unless your firmware chunks/reassembles large messages. The service/characteristic UUIDs in `bluetooth.js` are placeholders (Nordic UART Service convention) — replace them with your device's actual UUIDs.
@@ -119,9 +132,43 @@ Both are also `ScoreboardCommand`s (`EndGame`, `NewGame`), so either can be trig
 
 The match target itself (`Current.MatchTarget`, default 20 on a brand-new database) can be edited directly in the controls overlay, or set remotely with `SetMatchTarget` (see above).
 
+## Remote data push
+
+`Zeymera.Scoreboard.Api` is intentionally minimal for now, backed by PostgreSQL (EF Core, `Npgsql`) — four resources: `Customer` (a venue/salon, e.g. a billiards hall — `Endpoints/CustomersEndpoints.cs`), `Client` (one per monitor/kiosk at that venue, optionally linked to a `Customer` via `CustomerId` + which physical `TableNumber` it's showing — `Endpoints/ClientsEndpoints.cs`), `Player` (a kiosk's roster, synced from the Client), and `MatchStat` (a finished match's final stats). No teams, no league matches, no live-scoreboard mirror — those were removed as unnecessary for the current scope. `Zeymera.Scoreboard.Api.http` at the project root has ready-to-run requests for all of this (VS Code's REST Client extension or Visual Studio's built-in `.http` support) — it walks through creating a customer, registering clients for it, then pushing players/stats using the resulting client id.
+
+`Services/RemoteSyncService.cs` (Client project) is a `BackgroundService` that periodically POSTs local data to the Api, configured under `RemoteSync` in the Client's `appsettings.json`:
+
+```json
+"RemoteSync": {
+  "Enabled": false,
+  "ClientId": "",
+  "BaseUrl": "",
+  "PollSeconds": 15
+}
+```
+
+`Enabled` is the master switch — leave it `false` (the default) to skip remote push entirely, e.g. on a kiosk with no network reachable from it. `BaseUrl` is the Api's base address, e.g. `"http://192.168.1.50:5000/"` — the client POSTs `players`/`stats` relative to it. `ClientId` is a code obtained by first calling `POST /api/clients` on the Api once (see `Endpoints/ClientsEndpoints.cs`) to register this kiosk; every push is validated by `Middlewares/ClientIdMiddleware.cs`, which requires that code in an `X-Client-Id` header on every `/api/*` request (except `/api/clients` itself, for bootstrapping).
+
+Every `PollSeconds` (default 15), the service checks for unsent rows and pushes them. The whole background service — config parsing, the HTTP calls, everything — is wrapped so it can never crash the app: a bad `BaseUrl` just disables the feature for that run, and a failed push (server down, network blip) leaves the row as-is for the next tick to retry, with no separate retry/backoff bookkeeping needed:
+
+- **`POST players`** — any `player` row where `Synced = false` (new column, default `false`/`0`). Body: `{ id, nickname, name, avatarId, photoBase64, photoExtension }` — the photo is read off disk and base64-encoded only when the player has one (`PhotoPath` set); the Api saves it under its own `wwwroot/Players/<clientId>/` and serves it back out via `UseStaticFiles()`. Marks `Synced = true` on success.
+- **`POST stats`** — every `match_result` row (i.e. every finished match from "End Game" not yet sent — see "Match history" above). Body: `{ player1Id, player1Name, player1Score, player1Avg, player1HighRun, player2Id, player2Name, player2Score, player2Avg, player2HighRun, inning, matchTarget, winner, playedAt }`. **Deletes the row on success** rather than marking a flag — the Api becomes the durable store for match history, and local SQLite is only a buffer for matches it hasn't received yet. This means `/matches` will stop showing a match shortly after it's pushed, once `RemoteSync` is enabled.
+
+On the Api side, `POST /api/players` upserts (matches on `ClientId` + the kiosk's own `Id`, called `ExternalId` there) rather than insert-only, so a retried push after a lost response updates the existing row instead of duplicating it. `POST /api/stats` is a plain insert — a lost-response retry can create a duplicate stat row, which is an acceptable tradeoff for a scoreboard history log.
+
+`Zeymera.Scoreboard.Api` has no EF Core migrations applied anywhere yet (no local Postgres was reachable to test against) — run `dotnet ef database update` from `Zeymera.Scoreboard.Api/` against wherever Postgres actually lives before relying on any of this.
+
+## Raspberry Pi kiosk deployment
+
+`deploy/pi/` has everything for running the Client app as a kiosk on a Raspberry Pi — the systemd service, the .NET runtime install script, the Chromium kiosk launcher, the autostart wiring, and a one-command publish+deploy script for Windows. See `deploy/pi/README.md` for the full one-time setup and the routine redeploy command.
+
+## Logs
+
+The Client app logs via Serilog to both the console and a rolling daily file under `logs/` (relative to wherever it's running — `deploy/pi/README.md` covers the Pi path). Every WS connect/disconnect, received/sent message, and parsed command is logged with the sender's IP and a shared, monotonically increasing sequence number (`[#N]`) so you can line up exactly what came in against what went out, in order, across reconnects. `Services/ScoreboardCommandHub.cs` logs the hub side (registration, sends, broadcasts); `Program.cs`'s `/ws` handler logs the raw receive side. EF Core's and ASP.NET Core's own request/query logs are dialed down to `Warning` so the file stays focused on actual board traffic instead of SQL noise.
+
 ## Known gaps
 
 - `Services/WebSocketService.cs` in the Client project is an older outbound `ClientWebSocket` stub, superseded by the inbound `/ws` endpoint + `ScoreboardCommandHub` design above; currently unused.
 - No formal EF Core migrations — schema changes are patched in at startup in `Program.cs` (`CREATE TABLE IF NOT EXISTS` / `EnsureColumn`) since `Database.EnsureCreated()` is a no-op once the db file exists. Fine for now, but if the schema keeps growing, switching to real migrations would remove the need for this pattern.
-- The `/ws` state broadcast (see "Remote control input" above) does **not** fire on the shot clock's per-tick countdown (every 100ms) — only on discrete state changes (a command applied, the clock naturally expiring, etc.), to avoid flooding connected clients. A control app won't see the shot clock counting down live, only when it starts/stops/resets/expires.
+- The `/ws` state broadcast (see "Remote control input" above) does **not** fire on the shot clock's per-tick countdown (every 100ms) — only on discrete state changes (a command applied, the clock naturally expiring, etc.), to avoid flooding connected clients. `shotClockRemaining` in the snapshot is accurate at the moment it's sent, but a control app won't see it counting down live between those discrete pushes, only jump when it starts/stops/resets/expires.
 - Bluetooth is receive-only from the board's perspective — the board (as BLE *central*) never opens a *write* channel back to the paired peripheral, so the state broadcast above only reaches WebSocket clients, not a connected Bluetooth remote. Would need a specific writable GATT characteristic on the remote's firmware to support that.

@@ -23,6 +23,13 @@
             <label for="player-photo">Photo</label>
             <InputFile id="player-photo" OnChange="OnPhotoSelected" accept="image/*" />
         </div>
+        <div class="form-field">
+            <label>Avatar (used when no photo is set)</label>
+            <div class="avatar-preview-row">
+                <img class="avatar-preview" src="@AvatarGenerator.ToDataUri(_form.AvatarId ?? 0)" alt="" />
+                <button type="button" class="btn-secondary" @onclick="() => _showAvatarPicker = true">Choose Avatar</button>
+            </div>
+        </div>
 
         @if (_errorMessage is not null)
         {
@@ -37,6 +44,26 @@
             }
         </div>
     </EditForm>
+
+    @if (_showAvatarPicker)
+    {
+        <div class="avatar-picker-overlay" @onclick="() => _showAvatarPicker = false">
+            <div class="avatar-picker-dialog" @onclick:stopPropagation="true">
+                <h3>Choose an avatar</h3>
+                <div class="avatar-grid">
+                    @for (var i = 0; i < AvatarGenerator.Count; i++)
+                    {
+                        var avatarId = i;
+                        <button type="button" class="avatar-option @(_form.AvatarId == avatarId ? "selected" : "")"
+                                @onclick="() => SelectAvatar(avatarId)">
+                            <img src="@AvatarGenerator.ToDataUri(avatarId)" alt="" />
+                        </button>
+                    }
+                </div>
+                <button type="button" class="btn-secondary" @onclick="() => _showAvatarPicker = false">Close</button>
+            </div>
+        </div>
+    }
 
     <h2>Existing players</h2>
     @if (_players.Count == 0)
@@ -66,7 +93,7 @@
                             }
                             else
                             {
-                                <div class="player-photo-placeholder">?</div>
+                                <img src="@AvatarGenerator.ToDataUri(p.AvatarId ?? 0)" alt="" />
                             }
                         </td>
                         <td>@p.Id</td>
@@ -87,10 +114,11 @@
 
 @code {
     private List<Player> _players = new();
-    private PlayerFormModel _form = new();
+    private PlayerFormModel _form = new() { AvatarId = Random.Shared.Next(0, AvatarGenerator.Count) };
     private IBrowserFile? _selectedPhoto;
     private string? _errorMessage;
     private bool _isSaving;
+    private bool _showAvatarPicker;
 
     protected override async Task OnInitializedAsync()
     {
@@ -113,7 +141,8 @@
         {
             Id = player.Id,
             Nickname = player.Nickname,
-            Name = player.Name
+            Name = player.Name,
+            AvatarId = player.AvatarId ?? Random.Shared.Next(0, AvatarGenerator.Count)
         };
         _selectedPhoto = null;
         _errorMessage = null;
@@ -121,9 +150,15 @@
 
     private void CancelEdit()
     {
-        _form = new PlayerFormModel();
+        _form = new PlayerFormModel { AvatarId = Random.Shared.Next(0, AvatarGenerator.Count) };
         _selectedPhoto = null;
         _errorMessage = null;
+    }
+
+    private void SelectAvatar(int avatarId)
+    {
+        _form.AvatarId = avatarId;
+        _showAvatarPicker = false;
     }
 
     private async Task SavePlayerAsync()
@@ -135,7 +170,7 @@
             Player player;
             if (_form.Id == 0)
             {
-                player = new Player { Nickname = _form.Nickname, Name = _form.Name };
+                player = new Player { Nickname = _form.Nickname, Name = _form.Name, AvatarId = _form.AvatarId };
                 DbContext.Players.Add(player);
                 await DbContext.SaveChangesAsync(); // assigns player.Id
             }
@@ -145,6 +180,7 @@
                     ?? throw new InvalidOperationException($"Player {_form.Id} no longer exists.");
                 player.Nickname = _form.Nickname;
                 player.Name = _form.Name;
+                player.AvatarId = _form.AvatarId;
             }
 
             if (_selectedPhoto is not null)
@@ -168,7 +204,7 @@
             }
 
             await DbContext.SaveChangesAsync();
-            _form = new PlayerFormModel();
+            _form = new PlayerFormModel { AvatarId = Random.Shared.Next(0, AvatarGenerator.Count) };
             _selectedPhoto = null;
             await LoadPlayersAsync();
         }
@@ -198,5 +234,6 @@
         public int Id { get; set; }
         public string Nickname { get; set; } = "";
         public string Name { get; set; } = "";
+        public int? AvatarId { get; set; }
     }
 }

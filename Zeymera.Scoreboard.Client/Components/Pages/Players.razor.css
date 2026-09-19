@@ -175,3 +175,71 @@
     border-color: #c9202c;
     color: #c9202c;
 }
+
+.avatar-preview-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.avatar-preview {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+}
+
+.avatar-picker-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+}
+
+.avatar-picker-dialog {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    max-width: 480px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.avatar-picker-dialog h3 {
+    margin: 0 0 1rem;
+    font-size: 1.05rem;
+}
+
+.avatar-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.avatar-option {
+    border: 2px solid transparent;
+    border-radius: 50%;
+    padding: 2px;
+    background: none;
+    cursor: pointer;
+    line-height: 0;
+}
+
+.avatar-option img {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: block;
+}
+
+.avatar-option.selected {
+    border-color: #c9202c;
+}
+
+.avatar-option:hover {
+    border-color: #e0a3a7;
+}

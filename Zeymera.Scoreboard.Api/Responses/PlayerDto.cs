@@ -1,3 +1,3 @@
 namespace Zeymera.Scoreboard.Api.Responses;
 
-public record PlayerDto(string Code, string Name, int? TeamId, string? TeamName, DateTimeOffset CreatedAt);
+public record PlayerDto(int Id, string ClientId, int ExternalId, string Nickname, string Name, string? PhotoPath, int? AvatarId, DateTimeOffset UpdatedAt);

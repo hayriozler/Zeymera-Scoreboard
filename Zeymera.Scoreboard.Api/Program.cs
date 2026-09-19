@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Zeymera.Scoreboard.Api.Api;
 using Zeymera.Scoreboard.Api.Data;
 using Zeymera.Scoreboard.Api.Endpoints;
 using Zeymera.Scoreboard.Api.Middlewares;
@@ -22,7 +21,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+Directory.CreateDirectory(Path.Combine(app.Environment.WebRootPath, "Players"));
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -32,13 +32,13 @@ app.UseHttpsRedirection();
 
 app.UseCors(clientCorsPolicy);
 
+app.UseStaticFiles();
+
 app.UseMiddleware<ClientIdMiddleware>();
 
+app.MapCustomersEndpoints();
 app.MapClientsEndpoints();
-app.MapTeamsEndpoints();
 app.MapPlayersEndpoints();
-app.MapMatchesEndpoints();
 app.MapMatchStatsEndpoints();
-app.MapScoreboardStateEndpoints();
 
 app.Run();

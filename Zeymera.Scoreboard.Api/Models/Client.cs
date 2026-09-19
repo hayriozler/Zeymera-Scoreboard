@@ -6,6 +6,12 @@ public class Client
 
     public string? Name { get; set; }
 
+    public int? CustomerId { get; set; }
+
+    public Customer? Customer { get; set; }
+
+    public int? TableNumber { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset? LastSeenAt { get; set; }

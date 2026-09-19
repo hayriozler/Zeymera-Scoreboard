@@ -9,10 +9,13 @@ public class ClientIdMiddleware(RequestDelegate next)
 
     private static readonly PathString _apiPath = "/api";
     private static readonly PathString _clientsPath = "/api/clients";
+    private static readonly PathString _customersPath = "/api/customers";
 
     public async Task InvokeAsync(HttpContext context, ScoreboardDbContext db)
     {
-        if (!context.Request.Path.StartsWithSegments(_apiPath) || context.Request.Path.StartsWithSegments(_clientsPath))
+        if (!context.Request.Path.StartsWithSegments(_apiPath) ||
+            context.Request.Path.StartsWithSegments(_clientsPath) ||
+            context.Request.Path.StartsWithSegments(_customersPath))
         {
             await next(context);
             return;
@@ -36,7 +39,6 @@ public class ClientIdMiddleware(RequestDelegate next)
 
         client.LastSeenAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
-
         context.Items[ItemKey] = clientId;
 
         await next(context);

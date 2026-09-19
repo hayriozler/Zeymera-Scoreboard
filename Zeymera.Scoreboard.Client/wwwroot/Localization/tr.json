@@ -4,19 +4,18 @@
   "Player2Default": "OYUNCU 2",
   "Inning": "EL",
   "Match": "MAÇ",
-  "Avg": "ORT",
+  "Player1Avg": "ORT",
   "HighRun": "EN YÜKSEK SERİ",
   "CurrentPoints": "MEVCUT SAYI",
-  "BestAvg": "EN İYİ ORT",
+  "Player2Avg": "ORT",
   "ShotClock": "Süre",
   "Start": "Başlat",
   "Stop": "Durdur",
   "Reset": "Sıfırla",
-  "P1Score": "O1 Skor",
-  "P2Score": "O2 Skor",
   "Player1Label": "Oyuncu 1",
   "Player2Label": "Oyuncu 2",
   "ChoosePlayer": "Oyuncu seç...",
   "ActivePlayer": "Aktif Oyuncu",
-  "ControlsHint": "Kontrolleri gizlemek için C, süreyi başlatmak/durdurmak için T, sıfırlamak için R. Aktif oyuncuyu değiştirmek için 1/2, mevcut sayıyı ayarlamak için +/-."
+  "Add": "Ekle",
+  "ControlsHint": "Kontrolleri gizlemek için C, süreyi başlatmak/durdurmak için T, sıfırlamak için R. Aktif oyuncuyu değiştirmek için 1/2, mevcut sayıyı ayarlamak için +/-, onaylamak için Enter."
 }

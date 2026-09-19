@@ -1,6 +1,6 @@
 namespace Zeymera.Scoreboard.Api.Models;
 
-public class Team
+public class Customer
 {
     public int Id { get; set; }
 
@@ -8,9 +8,5 @@ public class Team
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    public List<Match> HomeMatches { get; set; } = [];
-
-    public List<Match> AwayMatches { get; set; } = [];
-
-    public List<Player> Players { get; set; } = [];
+    public List<Client> Clients { get; set; } = [];
 }

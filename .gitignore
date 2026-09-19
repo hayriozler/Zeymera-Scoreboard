@@ -16,6 +16,9 @@ publish-pi/
 *.db-shm
 *.db-wal
 
+## Runtime logs
+logs/
+
 ## Rider/VS Code
 .idea/
 .vscode/

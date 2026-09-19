@@ -26,7 +26,8 @@ public static class ScoreboardStateSnapshotFactory
             state.Inning,
             state.MatchTarget,
             state.ShotClockActive,
-            state.ShotClockSeconds);
+            state.ShotClockSeconds,
+            state.ShotClockRemaining);
     }
 
     public static string ToWireJson(ScoreboardStateSnapshot snapshot) =>

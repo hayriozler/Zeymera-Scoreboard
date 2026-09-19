@@ -9,7 +9,7 @@
     width: 100vw;
     height: 100vh;
     margin: 0;
-    padding: 2vh 3vw 1.6vh;
+    padding: 2vh 3vw 3.2vh;
     background: radial-gradient(ellipse at center, #141414 0%, #000 70%);
     color: var(--white);
     font-family: "Segoe UI", Roboto, Arial, sans-serif;
@@ -39,27 +39,43 @@
     clip-path: polygon(2.5% 0%, 97.5% 0%, 100% 50%, 97.5% 100%, 2.5% 100%, 0% 50%);
 }
 
-.header-icon svg {
-    width: clamp(2.4rem, 5vw, 4rem);
+.header-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3vh;
+    flex: 0 0 auto;
+}
+
+.header-logo {
     height: clamp(2.4rem, 5vw, 4rem);
+    width: auto;
+}
+
+.header-brand-label {
+    font-size: clamp(0.55rem, 0.9vw, 0.75rem);
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--label-gray);
+}
+
+.header-title-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8vh;
+    flex: 0 0 auto;
 }
 
 .title {
     margin: 0;
-    flex: 0 0 auto;
     font-size: clamp(1.6rem, 3.8vw, 3rem);
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     text-shadow: 0 0 12px rgba(201, 32, 44, 0.6);
     white-space: nowrap;
-}
-
-.header-status {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.4vh;
 }
 
 .balls {
@@ -93,7 +109,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    height: 10px;
+    height: clamp(16px, 2.2vh, 28px);
     background: #1a1a1a;
     z-index: 15;
 }
@@ -164,6 +180,20 @@
     border: 2px solid var(--white);
 }
 
+.player-avatar-fallback {
+    width: clamp(1.9rem, 3.4vw, 3rem);
+    height: clamp(1.9rem, 3.4vw, 3rem);
+    border-radius: 50%;
+    border: 2px solid var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(0.7rem, 1.3vw, 1rem);
+    font-weight: 800;
+    color: #111;
+    flex-shrink: 0;
+}
+
 .current-points-badge {
     background: var(--white);
     color: var(--red);
@@ -197,7 +227,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: clamp(7rem, 18.5vw, 17.5rem);
+    font-size: clamp(6rem, 16vw, 15rem);
     font-weight: 800;
     color: var(--white);
     line-height: 1;
@@ -257,6 +287,12 @@
 /* ---------- Stat bar ---------- */
 
 .stat-bar {
+    display: grid;
+    grid-template-columns: 1fr minmax(180px, 0.6fr) 1fr;
+    gap: 2.5vw;
+}
+
+.stat-group {
     display: flex;
     border: 2px solid var(--red);
     background: #050505;
@@ -268,8 +304,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.8vh;
-    padding: 2vh 0.5vw;
+    gap: 0.5vh;
+    padding: 1.3vh 0.5vw;
     border-left: 1px solid var(--red-dark);
 }
 
@@ -285,7 +321,7 @@
 }
 
 .stat-value {
-    font-size: clamp(1.8rem, 3.6vw, 3.2rem);
+    font-size: clamp(1.5rem, 3vw, 2.6rem);
     font-weight: 800;
     color: var(--white);
 }
@@ -313,18 +349,6 @@
 
 .sync-dot.offline {
     background: #666;
-}
-
-.brand-mark {
-    position: fixed;
-    left: 1.2vw;
-    bottom: 1.2vh;
-    font-size: clamp(0.6rem, 1vw, 0.85rem);
-    font-weight: 800;
-    letter-spacing: 0.35em;
-    color: var(--label-gray);
-    opacity: 0.55;
-    z-index: 15;
 }
 
 .controls-overlay {

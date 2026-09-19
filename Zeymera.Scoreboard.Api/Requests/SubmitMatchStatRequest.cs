@@ -1,8 +1,6 @@
-namespace Zeymera.Scoreboard.Api.Responses;
+namespace Zeymera.Scoreboard.Api.Requests;
 
-public record MatchStatDto(
-    int Id,
-    string ClientId,
+public record SubmitMatchStatRequest(
     int? Player1Id,
     string Player1Name,
     int Player1Score,
@@ -16,5 +14,4 @@ public record MatchStatDto(
     int Inning,
     int MatchTarget,
     int Winner,
-    DateTimeOffset PlayedAt,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset PlayedAt);

@@ -2,6 +2,7 @@ namespace Zeymera.Scoreboard.Client.Models;
 
 public enum ScoreboardCommand
 {
+    GetState,
     ToggleControls,
     ToggleShotClock,
     ResetShotClock,
@@ -9,17 +10,14 @@ public enum ScoreboardCommand
     SelectPlayer2,
     IncrementPoints,
     DecrementPoints,
+    AdjustPoints,
+    CommitPoints,
     RenamePlayer1,
     RenamePlayer2,
     UpsertPlayer,
     EndGame,
     NewGame,
     SetMatchTarget,
-    IncrementPlayer1Score,
-    DecrementPlayer1Score,
-    IncrementPlayer2Score,
-    DecrementPlayer2Score,
-    IncrementInning,
     SelectRosterPlayer1,
     SelectRosterPlayer2,
     ClearRosterPlayer1,

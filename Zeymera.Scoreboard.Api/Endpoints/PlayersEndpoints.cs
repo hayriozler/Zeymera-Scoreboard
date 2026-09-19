@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Zeymera.Scoreboard.Api.Data;
+using Zeymera.Scoreboard.Api.Middlewares;
 using Zeymera.Scoreboard.Api.Models;
 using Zeymera.Scoreboard.Api.Requests;
 using Zeymera.Scoreboard.Api.Responses;
@@ -12,48 +13,61 @@ public static class PlayersEndpoints
     {
         var group = app.MapGroup("/api/players").WithTags("Players");
 
-        group.MapGet("/", async (ScoreboardDbContext db, int? teamId) =>
+        group.MapGet("/", async (ScoreboardDbContext db, HttpContext context) =>
         {
-            var query = db.PlayerSet.Include(p => p.Team).AsQueryable();
-            if (teamId is not null)
-            {
-                query = query.Where(p => p.TeamId == teamId);
-            }
-
-            return await query
-                .OrderBy(p => p.Name)
-                .Select(p => new PlayerDto(p.Code, p.Name, p.TeamId, p.Team!.Name, p.CreatedAt))
+            var clientId = context.GetClientId()!;
+            return await db.PlayerSet
+                .Where(p => p.ClientId == clientId)
+                .OrderBy(p => p.ExternalId)
+                .Select(p => ToDto(p))
                 .ToListAsync();
         });
 
-        group.MapGet("/{code}", async (string code, ScoreboardDbContext db) =>
-            await db.PlayerSet.Include(p => p.Team).FirstOrDefaultAsync(p => p.Code == code) is { } player
-                ? Results.Ok(new PlayerDto(player.Code, player.Name, player.TeamId, player.Team!.Name, player.CreatedAt))
-                : Results.NotFound());
-
-        group.MapPost("/", async (CreatePlayerRequest request, ScoreboardDbContext db) =>
+        group.MapPost("/", async (UpsertPlayerRequest request, ScoreboardDbContext db, HttpContext context, IWebHostEnvironment env) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Name))
+            var clientId = context.GetClientId()!;
+
+            var player = await db.PlayerSet.FirstOrDefaultAsync(p => p.ClientId == clientId && p.ExternalId == request.Id);
+            if (player is null)
             {
-                return Results.BadRequest("Player name is required.");
+                player = new Player { ClientId = clientId, ExternalId = request.Id };
+                db.PlayerSet.Add(player);
             }
 
-            var team = await db.TeamSet.FindAsync(request.TeamId);
-            if (team is null)
+            player.Nickname = request.Nickname;
+            player.Name = request.Name;
+            player.AvatarId = request.AvatarId;
+            player.UpdatedAt = DateTimeOffset.UtcNow;
+
+            if (!string.IsNullOrEmpty(request.PhotoBase64))
             {
-                return Results.BadRequest("Team does not exist.");
+                byte[] bytes;
+                try
+                {
+                    bytes = Convert.FromBase64String(request.PhotoBase64);
+                }
+                catch (FormatException)
+                {
+                    return Results.BadRequest("Invalid PhotoBase64.");
+                }
+
+                var extension = string.IsNullOrWhiteSpace(request.PhotoExtension) ? "jpg" : request.PhotoExtension.TrimStart('.');
+                var folder = Path.Combine(env.WebRootPath, "Players", clientId);
+                Directory.CreateDirectory(folder);
+                var fileName = $"{request.Id}.{extension}";
+                await File.WriteAllBytesAsync(Path.Combine(folder, fileName), bytes);
+                player.PhotoPath = $"Players/{clientId}/{fileName}";
             }
 
-            var player = new Player { Name = request.Name.Trim(), TeamId = request.TeamId };
-            db.PlayerSet.Add(player);
             await db.SaveChangesAsync();
 
-            return Results.Created($"/api/players/{player.Code}", new PlayerDto(player.Code, player.Name, player.TeamId, team.Name, player.CreatedAt));
+            return Results.Ok(ToDto(player));
         });
 
-        group.MapDelete("/{code}", async (string code, ScoreboardDbContext db) =>
+        group.MapDelete("/{externalId:int}", async (int externalId, ScoreboardDbContext db, HttpContext context) =>
         {
-            var player = await db.PlayerSet.FindAsync(code);
+            var clientId = context.GetClientId()!;
+            var player = await db.PlayerSet.FirstOrDefaultAsync(p => p.ClientId == clientId && p.ExternalId == externalId);
             if (player is null)
             {
                 return Results.NotFound();
@@ -66,4 +80,7 @@ public static class PlayersEndpoints
 
         return group;
     }
+
+    private static PlayerDto ToDto(Player p) =>
+        new(p.Id, p.ClientId, p.ExternalId, p.Nickname, p.Name, p.PhotoPath, p.AvatarId, p.UpdatedAt);
 }

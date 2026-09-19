@@ -16,4 +16,5 @@ public record ScoreboardStateSnapshot(
     int Inning,
     int MatchTarget,
     bool ShotClockActive,
-    double ShotClockSeconds);
+    double ShotClockSeconds,
+    double ShotClockRemaining);

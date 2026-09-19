@@ -6,4 +6,6 @@ public class Player
     public string Nickname { get; set; } = "";
     public string Name { get; set; } = "";
     public string? PhotoPath { get; set; }
+    public int? AvatarId { get; set; }
+    public bool Synced { get; set; }
 }

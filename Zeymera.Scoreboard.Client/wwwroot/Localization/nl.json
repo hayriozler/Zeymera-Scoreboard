@@ -4,19 +4,18 @@
   "Player2Default": "SPELER 2",
   "Inning": "BEURT",
   "Match": "WEDSTRIJD",
-  "Avg": "GEM",
+  "Player1Avg": "GEM",
   "HighRun": "HOOGSTE SERIE",
   "CurrentPoints": "HUIDIGE PUNTEN",
-  "BestAvg": "BESTE GEM",
+  "Player2Avg": "GEM",
   "ShotClock": "Speeltijd",
   "Start": "Start",
   "Stop": "Stop",
   "Reset": "Reset",
-  "P1Score": "S1 Score",
-  "P2Score": "S2 Score",
   "Player1Label": "Speler 1",
   "Player2Label": "Speler 2",
   "ChoosePlayer": "Kies speler...",
   "ActivePlayer": "Actieve Speler",
-  "ControlsHint": "Druk op C om te verbergen, T om de speeltijd te starten/stoppen, R om te resetten. Druk op 1/2 om van actieve speler te wisselen, +/- om de huidige punten aan te passen."
+  "Add": "Toevoegen",
+  "ControlsHint": "Druk op C om te verbergen, T om de speeltijd te starten/stoppen, R om te resetten. Druk op 1/2 om van actieve speler te wisselen, +/- om de huidige punten aan te passen, Enter om te bevestigen."
 }
