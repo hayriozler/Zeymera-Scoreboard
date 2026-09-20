@@ -12,25 +12,25 @@ public static class ClientsEndpoints
     {
         var group = app.MapGroup("/api/clients").WithTags("Clients");
 
-        group.MapGet("/", async (ScoreboardDbContext db, int? customerId) =>
+        group.MapGet("/", async (ScoreboardDbContext db, int? clubId) =>
         {
             var query = db.ClientSet.AsQueryable();
-            if (customerId is not null)
+            if (clubId is not null)
             {
-                query = query.Where(c => c.CustomerId == customerId);
+                query = query.Where(c => c.ClubId == clubId);
             }
 
             return await query
                 .OrderBy(c => c.CreatedAt)
-                .Select(c => new ClientDto(c.Id, c.Name, c.CustomerId, c.TableNumber, c.CreatedAt, c.LastSeenAt))
+                .Select(c => new ClientDto(c.Id, c.Name, c.ClubId, c.TableNumber, c.CreatedAt, c.LastSeenAt))
                 .ToListAsync();
         });
 
         group.MapPost("/", async (RegisterClientRequest request, ScoreboardDbContext db) =>
         {
-            if (request.CustomerId is not null && await db.CustomerSet.FindAsync(request.CustomerId) is null)
+            if (request.ClubId is not null && await db.ClubSet.FindAsync(request.ClubId) is null)
             {
-                return Results.BadRequest("Customer does not exist.");
+                return Results.BadRequest("Club does not exist.");
             }
 
             string code;
@@ -43,13 +43,13 @@ public static class ClientsEndpoints
             {
                 Id = code,
                 Name = request.Name?.Trim(),
-                CustomerId = request.CustomerId,
+                ClubId = request.ClubId,
                 TableNumber = request.TableNumber
             };
             db.ClientSet.Add(client);
             await db.SaveChangesAsync();
 
-            return Results.Created($"/api/clients/{client.Id}", new ClientDto(client.Id, client.Name, client.CustomerId, client.TableNumber, client.CreatedAt, client.LastSeenAt));
+            return Results.Created($"/api/clients/{client.Id}", new ClientDto(client.Id, client.Name, client.ClubId, client.TableNumber, client.CreatedAt, client.LastSeenAt));
         });
 
         group.MapDelete("/{id}", async (string id, ScoreboardDbContext db) =>

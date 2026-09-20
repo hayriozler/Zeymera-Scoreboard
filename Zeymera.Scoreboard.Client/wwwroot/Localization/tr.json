@@ -7,6 +7,7 @@
   "Player1Avg": "ORT",
   "HighRun": "EN YÜKSEK SERİ",
   "CurrentPoints": "MEVCUT SAYI",
+  "PointsToGo": "SON {0}",
   "Player2Avg": "ORT",
   "ShotClock": "Süre",
   "Start": "Başlat",
@@ -17,5 +18,11 @@
   "ChoosePlayer": "Oyuncu seç...",
   "ActivePlayer": "Aktif Oyuncu",
   "Add": "Ekle",
-  "ControlsHint": "Kontrolleri gizlemek için C, süreyi başlatmak/durdurmak için T, sıfırlamak için R. Aktif oyuncuyu değiştirmek için 1/2, mevcut sayıyı ayarlamak için +/-, onaylamak için Enter."
+  "WarmUp": "Isınma",
+  "ChooseWarmUpDuration": "Isınma süresini seçin",
+  "MinutesUnit": "dk",
+  "TimeUp": "SÜRE DOLDU",
+  "BackToBoard": "Panoya Dön",
+  "WarmUpHint": "Duraklatmak/devam ettirmek için Boşluk veya T (veya 3 / Page Down), sıfırlamak için R (veya 6 / Sağ Ok), yeniden başlatmak için Enter, panoya dönmek için C veya Esc (veya 9 / Page Up) tuşuna basın.",
+  "ControlsHint": "Kontrolleri gizlemek için C (veya 9 / Page Up), süreyi başlatmak/durdurmak için T (veya 3 / Page Down), sıfırlamak için R (veya 6 / Sağ Ok). Aktif oyuncuyu değiştirmek için 1/2, mevcut sayıyı ayarlamak için +/-, onaylamak için Enter. Isınma sayacını başlatmak için W (veya 5), oyuncu seçiciyi açmak için P (veya 0 / Insert) tuşuna basın."
 }

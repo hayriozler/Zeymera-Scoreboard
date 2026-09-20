@@ -1,6 +1,6 @@
 namespace Zeymera.Scoreboard.Api.Models;
 
-public class Customer
+public class Club
 {
     public int Id { get; set; }
 

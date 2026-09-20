@@ -22,14 +22,19 @@ Click anywhere on the board to enter fullscreen kiosk mode.
 
 ## Keyboard shortcuts
 
-| Key | Action |
-|---|---|
-| `C` | Show/hide the controls overlay |
-| `T` | Start/stop the shot clock |
-| `R` | Reset the shot clock |
-| `1` / `2` | Set active player |
-| `P` | Open the player picker for whichever player is currently active |
-| `+` / `-` | Adjust the current-points counter |
+Every shortcut also has a numpad-friendly alternate, so a bare Bluetooth numeric keypad (no letter keys) can drive the whole board — including its NumLock-off equivalent, since a BLE keypad's NumLock state isn't something the app controls.
+
+| Key | Numpad alternate | NumLock-off equivalent | Action |
+|---|---|---|---|
+| `C` | `9` | Page Up | Show/hide the controls overlay |
+| `T` | `3` | Page Down | Start/stop the shot clock |
+| `R` | `6` | Right Arrow | Reset the shot clock |
+| `1` / `2` | *(already numeric)* | | Set active player |
+| `P` | `0` | Insert | Open the player picker for whichever player is currently active |
+| `W` | `5` | | Open the warm-up duration picker |
+| `+` / `-` | *(already numeric)* | | Adjust the current-points counter |
+
+The warm-up timer page (`/warmup/{minutes}`) has its own shortcuts: `T`/`3`/Page Down to pause/resume, `R`/`6`/Right Arrow to reset, `Enter` to restart, `C`/`Esc`/`9`/Page Up to return to the board.
 
 ## Remote control input
 
@@ -49,7 +54,7 @@ The scoreboard accepts the same commands from three sources. Every one of them e
    | Payload | Commands |
    |---|---|
    | *(none)* | `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `ClearRosterPlayer1`, `ClearRosterPlayer2`, `EndGame`, `NewGame` |
-   | number | `AdjustPoints` — the absolute tally value, not a delta (see below); `SetMatchTarget` — the target score; `SelectRosterPlayer1`, `SelectRosterPlayer2` — a roster player's `Id` to link to that slot |
+   | number | `AdjustPoints` — the absolute tally value, not a delta (see below); `SetMatchTarget` — the target score; `SelectRosterPlayer1`, `SelectRosterPlayer2` — a roster player's `Id` to link to that slot; `WarmUp` — the chosen duration in minutes, navigates the board to the full-screen warm-up timer at `/warmup/<minutes>` |
    | string | `RenamePlayer1`, `RenamePlayer2` — the free-typed name |
    | object | `UpsertPlayer` — see below |
 
@@ -134,7 +139,9 @@ The match target itself (`Current.MatchTarget`, default 20 on a brand-new databa
 
 ## Remote data push
 
-`Zeymera.Scoreboard.Api` is intentionally minimal for now, backed by PostgreSQL (EF Core, `Npgsql`) — four resources: `Customer` (a venue/salon, e.g. a billiards hall — `Endpoints/CustomersEndpoints.cs`), `Client` (one per monitor/kiosk at that venue, optionally linked to a `Customer` via `CustomerId` + which physical `TableNumber` it's showing — `Endpoints/ClientsEndpoints.cs`), `Player` (a kiosk's roster, synced from the Client), and `MatchStat` (a finished match's final stats). No teams, no league matches, no live-scoreboard mirror — those were removed as unnecessary for the current scope. `Zeymera.Scoreboard.Api.http` at the project root has ready-to-run requests for all of this (VS Code's REST Client extension or Visual Studio's built-in `.http` support) — it walks through creating a customer, registering clients for it, then pushing players/stats using the resulting client id.
+`Zeymera.Scoreboard.Api` is backed by PostgreSQL (EF Core, `Npgsql`) — six resources: `Club` (a venue, e.g. a billiards hall — `Endpoints/ClubsEndpoints.cs`), `Client` (one per monitor/kiosk at that club, optionally linked to a `Club` via `ClubId` + which physical `TableNumber` it's showing — `Endpoints/ClientsEndpoints.cs`), `Player` (a kiosk's roster, synced from the Client), `MatchStat` (a finished match's final stats), `Team` (a kiosk-local grouping of roster players, e.g. for a league match — `Endpoints/TeamsEndpoints.cs`), and `TeamPlayer` (the join table linking a `Team` to its member `Player`s). No league matches, no live-scoreboard mirror — those were removed as unnecessary for the current scope. `Zeymera.Scoreboard.Api.http` at the project root has ready-to-run requests for all of this (VS Code's REST Client extension or Visual Studio's built-in `.http` support) — it walks through creating a club, registering clients for it, then pushing players/stats/teams using the resulting client id.
+
+`Team`/`TeamPlayer` follow the same upsert-by-`ExternalId` pattern as `Player` (`POST /api/teams` with `{"id":1,"name":"Team A"}` creates or updates a kiosk-local team), and `PUT /api/teams/{externalId}/players` replaces a team's full roster in one call, given the member players' `ExternalId`s: `{"playerIds":[1,2]}`. `DELETE /api/teams/{externalId}/players/{playerExternalId}` removes a single member without touching the rest of the roster. All of these require the same `X-Client-Id` header as `/api/players`/`/api/stats`.
 
 `Services/RemoteSyncService.cs` (Client project) is a `BackgroundService` that periodically POSTs local data to the Api, configured under `RemoteSync` in the Client's `appsettings.json`:
 

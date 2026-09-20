@@ -1,54 +1,54 @@
 @baseUrl = http://localhost:5128
 
-### Create a customer (venue) - no X-Client-Id needed for this endpoint
-# @name createCustomer
-POST {{baseUrl}}/api/customers
+### Create a club (venue) - no X-Client-Id needed for this endpoint
+# @name createClub
+POST {{baseUrl}}/api/clubs
 Content-Type: application/json
 
 {
   "name": "Alkmaar HDV"
 }
 
-### List all customers
-GET {{baseUrl}}/api/customers
+### List all clubs
+GET {{baseUrl}}/api/clubs
 
-### Get one customer by id
-GET {{baseUrl}}/api/customers/{{createCustomer.response.body.id}}
+### Get one club by id
+GET {{baseUrl}}/api/clubs/{{createClub.response.body.id}}
 
-### Delete a customer (careful - cascades CustomerId to null on its clients, does not delete them)
-# DELETE {{baseUrl}}/api/customers/1
+### Delete a club (careful - cascades ClubId to null on its clients, does not delete them)
+# DELETE {{baseUrl}}/api/clubs/1
 
 ###
 ### Clients (monitors) - no X-Client-Id needed for these endpoints either
 ###
 
-### Register a client (monitor) for table 1 at the customer created above
+### Register a client (monitor) for table 1 at the club created above
 # @name createClientTable1
 POST {{baseUrl}}/api/clients
 Content-Type: application/json
 
 {
   "name": "Alkmaar HDV - Table 1",
-  "customerId": {{createCustomer.response.body.id}},
+  "clubId": {{createClub.response.body.id}},
   "tableNumber": 1
 }
 
-### Register a second client (monitor) for table 2 at the same customer
+### Register a second client (monitor) for table 2 at the same club
 # @name createClientTable2
 POST {{baseUrl}}/api/clients
 Content-Type: application/json
 
 {
   "name": "Alkmaar HDV - Table 2",
-  "customerId": {{createCustomer.response.body.id}},
+  "clubId": {{createClub.response.body.id}},
   "tableNumber": 2
 }
 
 ### List all clients
 GET {{baseUrl}}/api/clients
 
-### List only this customer's clients
-GET {{baseUrl}}/api/clients?customerId={{createCustomer.response.body.id}}
+### List only this club's clients
+GET {{baseUrl}}/api/clients?clubId={{createClub.response.body.id}}
 
 ### Delete a client
 # DELETE {{baseUrl}}/api/clients/{{createClientTable1.response.body.id}}
@@ -71,12 +71,55 @@ X-Client-Id: {{clientId}}
   "avatarId": 3
 }
 
+### Push/update a second player
+POST {{baseUrl}}/api/players
+Content-Type: application/json
+X-Client-Id: {{clientId}}
+
+{
+  "id": 2,
+  "nickname": "Player 2",
+  "name": "Player 2",
+  "avatarId": 5
+}
+
 ### List this client's players
 GET {{baseUrl}}/api/players
 X-Client-Id: {{clientId}}
 
 ### Remove a player by its ExternalId (the kiosk's local Player.Id)
 # DELETE {{baseUrl}}/api/players/1
+# X-Client-Id: {{clientId}}
+
+### Create/update a team (upsert by ExternalId - the kiosk's own local Team.Id)
+POST {{baseUrl}}/api/teams
+Content-Type: application/json
+X-Client-Id: {{clientId}}
+
+{
+  "id": 1,
+  "name": "Team A"
+}
+
+### Set a team's full roster by its players' ExternalIds (replaces the previous roster)
+PUT {{baseUrl}}/api/teams/1/players
+Content-Type: application/json
+X-Client-Id: {{clientId}}
+
+{
+  "playerIds": [1, 2]
+}
+
+### List this client's teams (with their player rosters)
+GET {{baseUrl}}/api/teams
+X-Client-Id: {{clientId}}
+
+### Remove a single player from a team
+# DELETE {{baseUrl}}/api/teams/1/players/2
+# X-Client-Id: {{clientId}}
+
+### Delete a team
+# DELETE {{baseUrl}}/api/teams/1
 # X-Client-Id: {{clientId}}
 
 ### Submit a finished match's stats

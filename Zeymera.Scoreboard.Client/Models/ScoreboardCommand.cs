@@ -22,4 +22,5 @@ public enum ScoreboardCommand
     SelectRosterPlayer2,
     ClearRosterPlayer1,
     ClearRosterPlayer2,
+    WarmUp,
 }

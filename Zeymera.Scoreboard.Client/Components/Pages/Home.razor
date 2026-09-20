@@ -63,6 +63,10 @@
                 }
             </div>
             <div class="player-score">@Current.Player1Score</div>
+            @if (Current.ActivePlayer == 1 && PointsToGo(1) is int nog1)
+            {
+                <div class="nog-indicator">@string.Format(L.T("PointsToGo"), nog1)</div>
+            }
         </section>
 
         <section class="center-panel">
@@ -102,6 +106,10 @@
                 }
             </div>
             <div class="player-score yellow">@Current.Player2Score</div>
+            @if (Current.ActivePlayer == 2 && PointsToGo(2) is int nog2)
+            {
+                <div class="nog-indicator">@string.Format(L.T("PointsToGo"), nog2)</div>
+            }
         </section>
     </main>
 
@@ -184,6 +192,9 @@
                 <button @onclick="() => DispatchAsync(ScoreboardCommand.ResetShotClock)">@L.T("Reset")</button>
             </div>
             <div class="control-group">
+                <button @onclick="OpenWarmupPicker">@L.T("WarmUp")</button>
+            </div>
+            <div class="control-group">
                 <span>Language</span>
                 <select value="@L.Language" @onchange="OnLanguageChanged">
                     <option value="tr">TR</option>
@@ -248,6 +259,21 @@
             </div>
         </div>
     }
+
+    @if (_showWarmupPicker)
+    {
+        <div class="player-picker-overlay" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            <div class="player-picker-dialog">
+                <h3>@L.T("ChooseWarmUpDuration")</h3>
+                <div class="warmup-picker-options">
+                    <button @onclick="() => StartWarmup(5)">5 @L.T("MinutesUnit")</button>
+                    <button @onclick="() => StartWarmup(10)">10 @L.T("MinutesUnit")</button>
+                    <button @onclick="() => StartWarmup(15)">15 @L.T("MinutesUnit")</button>
+                </div>
+                <button class="picker-close" @onclick="CloseWarmupPicker">Close</button>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -261,6 +287,7 @@
     private Player? _resolvedPlayer2;
     private List<Player> _rosterPlayers = new();
     private int? _showPlayerPicker;
+    private bool _showWarmupPicker;
 
     private ScoreboardState Current =new();
 
@@ -377,6 +404,19 @@
         _showPlayerPicker = null;
     }
 
+    private void OpenWarmupPicker()
+    {
+        _showWarmupPicker = true;
+        StateHasChanged();
+    }
+
+    private void CloseWarmupPicker()
+    {
+        _showWarmupPicker = false;
+    }
+
+    private void StartWarmup(int minutes) => Nav.NavigateTo($"/warmup/{minutes}");
+
     private void SelectRosterPlayer(int slot, int playerId)
     {
         if (slot == 1) Current.Player1Id = playerId; else Current.Player2Id = playerId;
@@ -463,6 +503,15 @@
     }
 
 
+    private const int PointsToGoThreshold = 3;
+
+    private int? PointsToGo(int slot)
+    {
+        var score = slot == 1 ? Current.Player1Score : Current.Player2Score;
+        var remaining = Current.MatchTarget - score;
+        return remaining is > 0 and <= PointsToGoThreshold ? remaining : null;
+    }
+
     private double ShotClockPercent => Current?.ShotClockSeconds > 0
         ? Math.Clamp(Current.ShotClockRemaining / Current.ShotClockSeconds * 100, 0, 100)
         : 0;
@@ -547,17 +596,23 @@
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key is "p" or "P")
+        if (e.Key is "p" or "P" or "0" or "Insert")
         {
             await OpenPlayerPickerAsync(Current.ActivePlayer);
             return;
         }
 
+        if (e.Key is "w" or "W" or "5")
+        {
+            OpenWarmupPicker();
+            return;
+        }
+
         ScoreboardCommand? command = e.Key switch
         {
-            "c" or "C" => ScoreboardCommand.ToggleControls,
-            "t" or "T" => ScoreboardCommand.ToggleShotClock,
-            "r" or "R" => ScoreboardCommand.ResetShotClock,
+            "c" or "C" or "9" or "PageUp" => ScoreboardCommand.ToggleControls,
+            "t" or "T" or "3" or "PageDown" => ScoreboardCommand.ToggleShotClock,
+            "r" or "R" or "6" or "ArrowRight" => ScoreboardCommand.ResetShotClock,
             "1" => ScoreboardCommand.SelectPlayer1,
             "2" => ScoreboardCommand.SelectPlayer2,
             "+" or "=" => ScoreboardCommand.IncrementPoints,
@@ -648,6 +703,12 @@
                 break;
             case ScoreboardCommand.ClearRosterPlayer2:
                 ClearRosterPlayer(2);
+                break;
+            case ScoreboardCommand.WarmUp:
+                if (GetIntPayload(payload) is int warmupMinutes)
+                {
+                    StartWarmup(warmupMinutes);
+                }
                 break;
         }
     }

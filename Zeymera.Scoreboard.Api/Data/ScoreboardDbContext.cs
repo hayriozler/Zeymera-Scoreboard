@@ -5,14 +5,16 @@ namespace Zeymera.Scoreboard.Api.Data;
 
 public class ScoreboardDbContext(DbContextOptions<ScoreboardDbContext> options) : DbContext(options)
 {
-    public DbSet<Customer> CustomerSet => Set<Customer>();
+    public DbSet<Club> ClubSet => Set<Club>();
     public DbSet<Client> ClientSet => Set<Client>();
     public DbSet<Player> PlayerSet => Set<Player>();
     public DbSet<MatchStat> MatchStatSet => Set<MatchStat>();
+    public DbSet<Team> TeamSet => Set<Team>();
+    public DbSet<TeamPlayer> TeamPlayerSet => Set<TeamPlayer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Customer>(entity =>
+        modelBuilder.Entity<Club>(entity =>
         {
             entity.Property(c => c.Name).IsRequired().HasMaxLength(200);
         });
@@ -22,9 +24,9 @@ public class ScoreboardDbContext(DbContextOptions<ScoreboardDbContext> options) 
             entity.Property(c => c.Id).HasMaxLength(10);
             entity.Property(c => c.Name).HasMaxLength(200);
 
-            entity.HasOne(c => c.Customer)
-                .WithMany(cu => cu.Clients)
-                .HasForeignKey(c => c.CustomerId)
+            entity.HasOne(c => c.Club)
+                .WithMany(cl => cl.Clients)
+                .HasForeignKey(c => c.ClubId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -50,6 +52,33 @@ public class ScoreboardDbContext(DbContextOptions<ScoreboardDbContext> options) 
             entity.HasOne<Client>()
                 .WithMany()
                 .HasForeignKey(s => s.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Team>(entity =>
+        {
+            entity.Property(t => t.ClientId).HasMaxLength(10);
+            entity.Property(t => t.Name).HasMaxLength(200);
+            entity.HasIndex(t => new { t.ClientId, t.ExternalId }).IsUnique();
+
+            entity.HasOne<Client>()
+                .WithMany()
+                .HasForeignKey(t => t.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TeamPlayer>(entity =>
+        {
+            entity.HasKey(tp => new { tp.TeamId, tp.PlayerId });
+
+            entity.HasOne(tp => tp.Team)
+                .WithMany(t => t.TeamPlayers)
+                .HasForeignKey(tp => tp.TeamId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(tp => tp.Player)
+                .WithMany()
+                .HasForeignKey(tp => tp.PlayerId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

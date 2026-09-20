@@ -6,9 +6,9 @@ public class Client
 
     public string? Name { get; set; }
 
-    public int? CustomerId { get; set; }
+    public int? ClubId { get; set; }
 
-    public Customer? Customer { get; set; }
+    public Club? Club { get; set; }
 
     public int? TableNumber { get; set; }
 

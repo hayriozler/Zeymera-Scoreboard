@@ -36,9 +36,10 @@ app.UseStaticFiles();
 
 app.UseMiddleware<ClientIdMiddleware>();
 
-app.MapCustomersEndpoints();
+app.MapClubsEndpoints();
 app.MapClientsEndpoints();
 app.MapPlayersEndpoints();
 app.MapMatchStatsEndpoints();
+app.MapTeamsEndpoints();
 
 app.Run();

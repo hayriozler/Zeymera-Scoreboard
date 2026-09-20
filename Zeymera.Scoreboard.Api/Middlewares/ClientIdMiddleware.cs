@@ -9,13 +9,13 @@ public class ClientIdMiddleware(RequestDelegate next)
 
     private static readonly PathString _apiPath = "/api";
     private static readonly PathString _clientsPath = "/api/clients";
-    private static readonly PathString _customersPath = "/api/customers";
+    private static readonly PathString _clubsPath = "/api/clubs";
 
     public async Task InvokeAsync(HttpContext context, ScoreboardDbContext db)
     {
         if (!context.Request.Path.StartsWithSegments(_apiPath) ||
             context.Request.Path.StartsWithSegments(_clientsPath) ||
-            context.Request.Path.StartsWithSegments(_customersPath))
+            context.Request.Path.StartsWithSegments(_clubsPath))
         {
             await next(context);
             return;

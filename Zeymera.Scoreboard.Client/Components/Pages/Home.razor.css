@@ -238,6 +238,25 @@
     text-shadow: 0 0 18px rgba(244, 196, 48, 0.35);
 }
 
+.nog-indicator {
+    text-align: center;
+    padding: 0.6vh 0 1.4vh;
+    font-size: clamp(1.1rem, 2.4vw, 2rem);
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    color: var(--red);
+    animation: nog-pulse 1s ease-in-out infinite;
+}
+
+@keyframes nog-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
+}
+
 .center-panel {
     display: flex;
     flex-direction: column;
@@ -510,6 +529,27 @@
     background: #333;
     color: var(--label-gray);
     font-weight: 800;
+}
+
+.warmup-picker-options {
+    display: flex;
+    gap: 0.8rem;
+}
+
+.warmup-picker-options button {
+    flex: 1;
+    background: var(--red-dark);
+    color: var(--white);
+    border: none;
+    border-radius: 6px;
+    padding: 0.9rem 0;
+    font-size: 1.1rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.warmup-picker-options button:hover {
+    background: var(--red);
 }
 
 .picker-clear,
