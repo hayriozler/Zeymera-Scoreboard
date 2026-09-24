@@ -16,8 +16,13 @@ public static class PlayersEndpoints
         group.MapGet("/", async (ScoreboardDbContext db, HttpContext context) =>
         {
             var clientId = context.GetClientId()!;
-            return await db.PlayerSet
-                .Where(p => p.ClientId == clientId)
+            var clubId = context.GetClubId();
+
+            var query = clubId is null
+                ? db.PlayerSet.Where(p => p.ClientId == clientId)
+                : db.PlayerSet.Where(p => db.ClientSet.Any(c => c.Id == p.ClientId && c.ClubId == clubId));
+
+            return await query
                 .OrderBy(p => p.ExternalId)
                 .Select(p => ToDto(p))
                 .ToListAsync();

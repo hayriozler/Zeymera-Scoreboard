@@ -15,12 +15,12 @@ public static class ClubsEndpoints
         group.MapGet("/", async (ScoreboardDbContext db) =>
             await db.ClubSet
                 .OrderBy(c => c.Name)
-                .Select(c => new ClubDto(c.Id, c.Name, c.CreatedAt))
+                .Select(c => new ClubDto(c.Id, c.ClientId, c.Name, c.CreatedAt))
                 .ToListAsync());
 
         group.MapGet("/{id:int}", async (int id, ScoreboardDbContext db) =>
             await db.ClubSet.FindAsync(id) is { } club
-                ? Results.Ok(new ClubDto(club.Id, club.Name, club.CreatedAt))
+                ? Results.Ok(new ClubDto(club.Id, club.ClientId, club.Name, club.CreatedAt))
                 : Results.NotFound());
 
         group.MapPost("/", async (CreateClubRequest request, ScoreboardDbContext db) =>
@@ -30,11 +30,17 @@ public static class ClubsEndpoints
                 return Results.BadRequest("Club name is required.");
             }
 
-            var club = new Club { Name = request.Name.Trim() };
+            string clientId;
+            do
+            {
+                clientId = ClientCodeGenerator.Generate();
+            } while (await db.ClubSet.AnyAsync(c => c.ClientId == clientId));
+
+            var club = new Club { Name = request.Name.Trim(), ClientId = clientId };
             db.ClubSet.Add(club);
             await db.SaveChangesAsync();
 
-            return Results.Created($"/api/clubs/{club.Id}", new ClubDto(club.Id, club.Name, club.CreatedAt));
+            return Results.Created($"/api/clubs/{club.Id}", new ClubDto(club.Id, club.ClientId, club.Name, club.CreatedAt));
         });
 
         group.MapDelete("/{id:int}", async (int id, ScoreboardDbContext db) =>

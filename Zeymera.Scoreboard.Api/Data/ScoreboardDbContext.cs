@@ -16,7 +16,9 @@ public class ScoreboardDbContext(DbContextOptions<ScoreboardDbContext> options) 
     {
         modelBuilder.Entity<Club>(entity =>
         {
+            entity.Property(c => c.ClientId).IsRequired().HasMaxLength(10);
             entity.Property(c => c.Name).IsRequired().HasMaxLength(200);
+            entity.HasIndex(c => c.ClientId).IsUnique();
         });
 
         modelBuilder.Entity<Client>(entity =>

@@ -15,6 +15,7 @@ public enum ScoreboardCommand
     RenamePlayer1,
     RenamePlayer2,
     UpsertPlayer,
+    AddPlayer = UpsertPlayer,
     EndGame,
     NewGame,
     SetMatchTarget,
@@ -23,4 +24,5 @@ public enum ScoreboardCommand
     ClearRosterPlayer1,
     ClearRosterPlayer2,
     WarmUp,
+    AddTeam,
 }

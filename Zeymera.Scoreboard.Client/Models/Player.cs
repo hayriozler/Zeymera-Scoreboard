@@ -7,5 +7,8 @@ public class Player
     public string Name { get; set; } = "";
     public string? PhotoPath { get; set; }
     public int? AvatarId { get; set; }
+    public string? AvatarName { get; set; }
     public bool Synced { get; set; }
+    public int? TeamId { get; set; }
+    public int? RemoteId { get; set; }
 }

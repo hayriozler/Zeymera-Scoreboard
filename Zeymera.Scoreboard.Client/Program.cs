@@ -1,10 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Events;
-using System.Net.WebSockets;
-using System.Text;
 using Zeymera.Scoreboard.Client.Components;
-using Zeymera.Scoreboard.Client.Models;
+using Zeymera.Scoreboard.Client.Endpoints;
 using Zeymera.Scoreboard.Client.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +43,27 @@ static LogEventLevel ParseLogLevel(string? value) => value?.ToLowerInvariant() s
     _ => LogEventLevel.Information,
 };
 
+static void EnsureColumn(DbContext db, string table, string column, string sqlType)
+{
+    using var checkCommand = db.Database.GetDbConnection().CreateCommand();
+    checkCommand.CommandText = $"PRAGMA table_info({table});";
+    checkCommand.Connection!.Open();
+    using (var reader = checkCommand.ExecuteReader())
+    {
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+    }
+
+#pragma warning disable EF1002
+    db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {column} {sqlType};");
+#pragma warning restore EF1002
+}
+
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -66,6 +85,8 @@ builder.Services.AddSingleton<ScoreboardCommandHub>();
 builder.Services.Configure<RemoteSyncOptions>(builder.Configuration.GetSection("RemoteSync"));
 builder.Services.AddHttpClient(nameof(RemoteSyncService));
 builder.Services.AddHostedService<RemoteSyncService>();
+builder.Services.AddHttpClient(nameof(RemotePullService));
+builder.Services.AddHostedService<RemotePullService>();
 
 var app = builder.Build();
 app.UseAntiforgery();
@@ -106,6 +127,7 @@ using (var scope = app.Services.CreateScope())
             Name TEXT NOT NULL DEFAULT '',
             PhotoPath TEXT NULL,
             AvatarId INTEGER NULL,
+            AvatarName TEXT NULL,
             Synced INTEGER NOT NULL DEFAULT 0
         );
         """);
@@ -130,92 +152,24 @@ using (var scope = app.Services.CreateScope())
             Winner INTEGER NOT NULL
         );
         """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS team (
+            Id INTEGER PRIMARY KEY,
+            Name TEXT NOT NULL DEFAULT '',
+            RemoteId INTEGER NULL
+        );
+        """);
+
+    EnsureColumn(db, "player", "TeamId", "INTEGER NULL");
+    EnsureColumn(db, "player", "RemoteId", "INTEGER NULL");
+    EnsureColumn(db, "player", "AvatarName", "TEXT NULL");
 }
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-const int maxControlMessageBytes = 16 * 1024 * 1024; // generous headroom for a base64-encoded player photo
-
 app.UseWebSockets();
-app.Map("/ws", async (HttpContext context, ScoreboardCommandHub hub, ILogger<Program> logger) =>
-{
-    if (!context.WebSockets.IsWebSocketRequest)
-    {
-        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        return;
-    }
-
-    var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-
-    using var socket = await context.WebSockets.AcceptWebSocketAsync();
-    logger.LogInformation("WS connected: {RemoteIp}", remoteIp);
-    hub.ControllerConnected(socket, remoteIp);
-    try
-    {
-        var buffer = new byte[8192];
-        while (socket.State == WebSocketState.Open)
-        {
-            using var messageStream = new MemoryStream();
-            WebSocketReceiveResult result;
-            var closed = false;
-            do
-            {
-                result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), context.RequestAborted);
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    closed = true;
-                    break;
-                }
-
-                messageStream.Write(buffer, 0, result.Count);
-                if (messageStream.Length > maxControlMessageBytes)
-                {
-                    logger.LogWarning("Message from {RemoteIp} exceeded {MaxBytes} bytes - closing connection", remoteIp, maxControlMessageBytes);
-                    await socket.CloseAsync(WebSocketCloseStatus.MessageTooBig, "message too large", CancellationToken.None);
-                    closed = true;
-                    break;
-                }
-            } while (!result.EndOfMessage);
-
-            if (closed)
-            {
-                logger.LogInformation("WS closed by {RemoteIp}", remoteIp);
-                break;
-            }
-
-            var seq = hub.NextSequence();
-            var text = Encoding.UTF8.GetString(messageStream.ToArray());
-            logger.LogInformation("[#{Seq}] RECV from {RemoteIp}: {Text}", seq, remoteIp, text);
-
-            var messages = ScoreboardCommandParser.TryParse(text);
-            if (messages.Count > 0)
-            {
-                logger.LogInformation("[#{Seq}] Parsed {Count} command(s) from {RemoteIp}: {Commands}", seq, messages.Count, remoteIp, string.Join(", ", messages.Select(m => m.Command)));
-                hub.Publish(messages);
-            }
-            else
-            {
-                logger.LogWarning("[#{Seq}] Could not parse any command from {RemoteIp}: {Text}", seq, remoteIp, text);
-            }
-        }
-    }
-    catch (OperationCanceledException)
-    {
-        // control device dropped the connection without a clean close handshake (tab closed, network loss, etc.)
-        logger.LogInformation("WS connection from {RemoteIp} cancelled (dropped without a close handshake)", remoteIp);
-    }
-    catch (WebSocketException ex)
-    {
-        // ditto - abrupt disconnect at the socket level
-        logger.LogWarning(ex, "WS connection from {RemoteIp} ended abruptly", remoteIp);
-    }
-    finally
-    {
-        hub.ControllerDisconnected(socket);
-        logger.LogInformation("WS disconnected: {RemoteIp}", remoteIp);
-    }
-});
+app.MapScoreboardWebSocket();
 
 app.Run();

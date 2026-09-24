@@ -6,6 +6,7 @@ public class ClientIdMiddleware(RequestDelegate next)
 {
     public const string HeaderName = "X-Client-Id";
     public const string ItemKey = "ClientId";
+    public const string ClubIdItemKey = "ClubId";
 
     private static readonly PathString _apiPath = "/api";
     private static readonly PathString _clientsPath = "/api/clients";
@@ -40,6 +41,7 @@ public class ClientIdMiddleware(RequestDelegate next)
         client.LastSeenAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
         context.Items[ItemKey] = clientId;
+        context.Items[ClubIdItemKey] = client.ClubId;
 
         await next(context);
     }
@@ -49,4 +51,7 @@ public static class HttpContextClientIdExtensions
 {
     public static string? GetClientId(this HttpContext context) =>
         context.Items.TryGetValue(ClientIdMiddleware.ItemKey, out var value) ? value as string : null;
+
+    public static int? GetClubId(this HttpContext context) =>
+        context.Items.TryGetValue(ClientIdMiddleware.ClubIdItemKey, out var value) ? value as int? : null;
 }

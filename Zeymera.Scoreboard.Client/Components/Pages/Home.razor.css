@@ -172,6 +172,16 @@
     letter-spacing: 0.15em;
 }
 
+.player-team {
+    text-align: center;
+    padding: 0.5vh 0;
+    font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--label-gray);
+}
+
 .player-photo {
     width: clamp(1.9rem, 3.4vw, 3rem);
     height: clamp(1.9rem, 3.4vw, 3rem);

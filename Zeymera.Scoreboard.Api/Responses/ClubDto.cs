@@ -1,3 +1,3 @@
 namespace Zeymera.Scoreboard.Api.Responses;
 
-public record ClubDto(int Id, string Name, DateTimeOffset CreatedAt);
+public record ClubDto(int Id, string ClientId, string Name, DateTimeOffset CreatedAt);

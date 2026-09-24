@@ -56,7 +56,7 @@ The scoreboard accepts the same commands from two sources. Every one of them end
    | *(none)* | `ToggleControls`, `ToggleShotClock`, `ResetShotClock`, `SelectPlayer1`, `SelectPlayer2`, `IncrementPoints`, `DecrementPoints`, `CommitPoints`, `ClearRosterPlayer1`, `ClearRosterPlayer2`, `EndGame`, `NewGame` |
    | number | `AdjustPoints` — the absolute tally value, not a delta (see below); `SetMatchTarget` — the target score; `SelectRosterPlayer1`, `SelectRosterPlayer2` — a roster player's `Id` to link to that slot; `WarmUp` — the chosen duration in minutes, navigates the board to the full-screen warm-up timer at `/warmup/<minutes>` |
    | string | `RenamePlayer1`, `RenamePlayer2` — the free-typed name |
-   | object | `UpsertPlayer` — see below |
+   | object | `UpsertPlayer` (alias: `AddPlayer`) — see below; `AddTeam` — see below |
 
    ```json
    {"command":"IncrementPoints"}
@@ -69,9 +69,15 @@ The scoreboard accepts the same commands from two sources. Every one of them end
 
    There's a single score input, not one per player: the "Current Points" counter (`IncrementPoints`/`DecrementPoints`/`AdjustPoints`) always applies to whichever player is currently active (`ActivePlayer`, set via `SelectPlayer1`/`SelectPlayer2`). Despite the name, `AdjustPoints` takes the tally's **absolute value**, not a delta — send `payload: 3` to mean "the tally is 3", not "add 3" (the command name predates this and was kept as-is to avoid a breaking change for existing remotes). This is deliberate: a remote that tracks its own running tally and pushes it on every change is far more resilient to a flaky connection than one that sends deltas — a lost or duplicated absolute update self-corrects on the next message, while a lost delta permanently desyncs the two sides. It only tallies a pending count — nothing is written to a real score until `CommitPoints` (Enter key, or the on-screen "Add" button) applies that tally to the active player's score, updates their high run, resets the counter to 0, hands the turn to the other player, and — only when Player 1 was the active player — advances `Inning`. `Inning` never decrements; correct a bad tally before committing it with `DecrementPoints`/`AdjustPoints`, not by rolling the inning back after the fact.
 
-   `UpsertPlayer` adds or updates a row in the local `player` roster (see "Player roster" below) — the photo is optional and only needs sending when it changes:
+   `UpsertPlayer` (also accepted as `AddPlayer`, same command) adds or updates a row in the local `player` roster (see "Player roster" below) — the photo is optional and only needs sending when it changes. `avatar` is an arbitrary string hashed into one of the generated avatars (the same string always maps to the same avatar); omit it to get a random avatar on creation, or leave an existing player's avatar unchanged. `teamId` links the player to a row added via `AddTeam`:
    ```json
-   {"command":"UpsertPlayer","payload":{"id":7,"nickname":"Hayri","name":"Hayri Ozler","photoBase64":"<base64 jpeg bytes>","photoExtension":"jpg"}}
+   {"command":"UpsertPlayer","payload":{"id":7,"nickname":"Hayri","name":"Hayri Ozler","photoBase64":"<base64 jpeg bytes>","photoExtension":"jpg","avatar":"eagle","teamId":1}}
+   {"command":"AddPlayer","payload":{"id":3,"nickName":"Ali","name":"Ali Yılmaz","avatar":"eagle","teamId":1}}
+   ```
+
+   `AddTeam` adds or updates a row in the local `team` table by `id`:
+   ```json
+   {"command":"AddTeam","payload":{"id":1,"name":"Kartallar"}}
    ```
 
    **C# example** (MAUI or any .NET client, using `System.Net.WebSockets.ClientWebSocket`):
@@ -140,6 +146,8 @@ The match target itself (`Current.MatchTarget`, default 20 on a brand-new databa
 
 `Zeymera.Scoreboard.Api` is backed by PostgreSQL (EF Core, `Npgsql`) — six resources: `Club` (a venue, e.g. a billiards hall — `Endpoints/ClubsEndpoints.cs`), `Client` (one per monitor/kiosk at that club, optionally linked to a `Club` via `ClubId` + which physical `TableNumber` it's showing — `Endpoints/ClientsEndpoints.cs`), `Player` (a kiosk's roster, synced from the Client), `MatchStat` (a finished match's final stats), `Team` (a kiosk-local grouping of roster players, e.g. for a league match — `Endpoints/TeamsEndpoints.cs`), and `TeamPlayer` (the join table linking a `Team` to its member `Player`s). No league matches, no live-scoreboard mirror — those were removed as unnecessary for the current scope. `Zeymera.Scoreboard.Api.http` at the project root has ready-to-run requests for all of this (VS Code's REST Client extension or Visual Studio's built-in `.http` support) — it walks through creating a club, registering clients for it, then pushing players/stats/teams using the resulting client id.
 
+`POST /api/clubs` generates its own `ClientId` code (via `Data/ClientCodeGenerator.cs`, the same generator `POST /api/clients` uses) and returns it in the response — a short random code identifying the club itself, distinct from any individual kiosk's own `Client.Id`.
+
 `Team`/`TeamPlayer` follow the same upsert-by-`ExternalId` pattern as `Player` (`POST /api/teams` with `{"id":1,"name":"Team A"}` creates or updates a kiosk-local team), and `PUT /api/teams/{externalId}/players` replaces a team's full roster in one call, given the member players' `ExternalId`s: `{"playerIds":[1,2]}`. `DELETE /api/teams/{externalId}/players/{playerExternalId}` removes a single member without touching the rest of the roster. All of these require the same `X-Client-Id` header as `/api/players`/`/api/stats`.
 
 `Services/RemoteSyncService.cs` (Client project) is a `BackgroundService` that periodically POSTs local data to the Api, configured under `RemoteSync` in the Client's `appsettings.json`:
@@ -170,7 +178,7 @@ On the Api side, `POST /api/players` upserts (matches on `ClientId` + the kiosk'
 
 ## Logs
 
-The Client app logs via Serilog to both the console and a rolling daily file under `logs/` (relative to wherever it's running — `deploy/pi/README.md` covers the Pi path). Every WS connect/disconnect, received/sent message, and parsed command is logged with the sender's IP and a shared, monotonically increasing sequence number (`[#N]`) so you can line up exactly what came in against what went out, in order, across reconnects. `Services/ScoreboardCommandHub.cs` logs the hub side (registration, sends, broadcasts); `Program.cs`'s `/ws` handler logs the raw receive side. EF Core's and ASP.NET Core's own request/query logs are dialed down to `Warning` so the file stays focused on actual board traffic instead of SQL noise.
+The Client app logs via Serilog to both the console and a rolling daily file under `logs/` (relative to wherever it's running — `deploy/pi/README.md` covers the Pi path). Every WS connect/disconnect, received/sent message, and parsed command is logged with the sender's IP and a shared, monotonically increasing sequence number (`[#N]`) so you can line up exactly what came in against what went out, in order, across reconnects. `Services/ScoreboardCommandHub.cs` logs the hub side (registration, sends, broadcasts); `Endpoints/ScoreboardWebSocketEndpoint.cs`'s `/ws` handler logs the raw receive side. EF Core's and ASP.NET Core's own request/query logs are dialed down to `Warning` so the file stays focused on actual board traffic instead of SQL noise.
 
 ## Known gaps
 

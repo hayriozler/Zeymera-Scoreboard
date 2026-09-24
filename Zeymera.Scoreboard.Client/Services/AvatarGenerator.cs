@@ -23,6 +23,17 @@ public static class AvatarGenerator
 
     public static string GetColor(int seed) => _palettes[Math.Abs(seed) % _palettes.Length][1];
 
+    public static int SeedFromName(string name)
+    {
+        var hash = 2166136261u;
+        foreach (var b in Encoding.UTF8.GetBytes(name))
+        {
+            hash = (hash ^ b) * 16777619u;
+        }
+
+        return (int)(hash % Count);
+    }
+
     public static string ToSvg(int seed, int size = 64)
     {
         var rnd = new Random(seed);

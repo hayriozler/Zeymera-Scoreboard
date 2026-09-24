@@ -1,7 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using System.Net.Http.Json;
-using Zeymera.Scoreboard.Client.Models;
 
 namespace Zeymera.Scoreboard.Client.Services;
 
@@ -13,7 +11,6 @@ public class RemoteSyncService(
     ILogger<RemoteSyncService> logger) : BackgroundService
 {
     private readonly RemoteSyncOptions _options = options.Value;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try

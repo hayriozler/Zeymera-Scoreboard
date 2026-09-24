@@ -37,13 +37,20 @@ create a default `pi` account).
    ```
    Verify it's up: `ssh admin@scoreboard 'curl -sSf http://localhost:5288/ > /dev/null && echo OK'`
 
-4. **Install the kiosk launcher and wire up autostart**:
+4. **Install the kiosk's apt dependencies** (`unclutter`, `wmctrl`, `xset`, Chromium — see
+   `install-kiosk-deps.sh` for why each is needed):
+   ```bash
+   scp deploy/pi/install-kiosk-deps.sh admin@scoreboard:~/
+   ssh admin@scoreboard 'bash install-kiosk-deps.sh'
+   ```
+
+5. **Install the kiosk launcher and wire up autostart**:
    ```bash
    scp deploy/pi/launch-kiosk.sh deploy/pi/setup-autostart.sh admin@scoreboard:/home/admin/zeymera-scoreboard/
    ssh admin@scoreboard 'chmod +x /home/admin/zeymera-scoreboard/launch-kiosk.sh && cd /home/admin/zeymera-scoreboard && bash setup-autostart.sh'
    ```
 
-5. **Reboot** and confirm Chromium comes up in kiosk mode on its own:
+6. **Reboot** and confirm Chromium comes up in kiosk mode on its own:
    ```bash
    ssh admin@scoreboard 'sudo reboot'
    ```
@@ -92,6 +99,7 @@ rm -f ~/.config/chromium/Singleton*
 |---|---|---|
 | `install-dotnet.sh` | Pi, once | Installs the ASP.NET Core runtime to `~/.dotnet` |
 | `zeymera-scoreboard.service` | Pi, once | systemd unit — runs the app, `Restart=always` |
+| `install-kiosk-deps.sh` | Pi, once | apt-installs `unclutter`, `wmctrl`, `xset`, Chromium — everything `launch-kiosk.sh` needs |
 | `launch-kiosk.sh` | Pi, every boot (via autostart) | Waits for the app, then launches Chromium in kiosk mode |
 | `setup-autostart.sh` | Pi, once | Wires `launch-kiosk.sh` into `/etc/xdg/labwc/autostart` |
 | `publish-and-deploy.ps1` | Windows, every redeploy | Publish → strip local data → scp → restart service |

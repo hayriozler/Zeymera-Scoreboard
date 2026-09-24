@@ -61,6 +61,10 @@
                     <span class="current-points-badge">@Current.CurrentPoints</span>
                 }
             </div>
+            @if (GetTeamName(1) is { } teamName1)
+            {
+                <div class="player-team">@teamName1</div>
+            }
             <div class="player-score">@Current.Player1Score</div>
             @if (Current.ActivePlayer == 1 && PointsToGo(1) is int nog1)
             {
@@ -104,6 +108,10 @@
                     <span class="current-points-badge">@Current.CurrentPoints</span>
                 }
             </div>
+            @if (GetTeamName(2) is { } teamName2)
+            {
+                <div class="player-team">@teamName2</div>
+            }
             <div class="player-score yellow">@Current.Player2Score</div>
             @if (Current.ActivePlayer == 2 && PointsToGo(2) is int nog2)
             {
@@ -220,7 +228,7 @@
                 <h3>@L.T(slot == 1 ? "Player1Label" : "Player2Label")</h3>
                 @if (_rosterPlayers.Count == 0)
                 {
-                    <p class="picker-empty">No players in the roster yet - add some on the Players page.</p>
+                    <p class="picker-empty">@L.T("NoPlayersInRoster")</p>
                 }
                 else
                 {
@@ -241,8 +249,8 @@
                         }
                     </div>
                 }
-                <button class="picker-clear" @onclick="() => DispatchAsync(slot == 1 ? ScoreboardCommand.ClearRosterPlayer1 : ScoreboardCommand.ClearRosterPlayer2)">Use manual name instead</button>
-                <button class="picker-close" @onclick="ClosePlayerPicker">Close</button>
+                <button class="picker-clear" @onclick="() => DispatchAsync(slot == 1 ? ScoreboardCommand.ClearRosterPlayer1 : ScoreboardCommand.ClearRosterPlayer2)">@L.T("UseManualNameInstead")</button>
+                <button class="picker-close" @onclick="ClosePlayerPicker">@L.T("Close")</button>
             </div>
         </div>
     }
@@ -257,7 +265,7 @@
                     <button @onclick="() => StartWarmup(10)">10 @L.T("MinutesUnit")</button>
                     <button @onclick="() => StartWarmup(15)">15 @L.T("MinutesUnit")</button>
                 </div>
-                <button class="picker-close" @onclick="CloseWarmupPicker">Close</button>
+                <button class="picker-close" @onclick="CloseWarmupPicker">@L.T("Close")</button>
             </div>
         </div>
     }
@@ -272,6 +280,8 @@
 
     private Player? _resolvedPlayer1;
     private Player? _resolvedPlayer2;
+    private Team? _resolvedTeam1;
+    private Team? _resolvedTeam2;
     private List<Player> _rosterPlayers = new();
     private int? _showPlayerPicker;
     private bool _showWarmupPicker;
@@ -329,7 +339,11 @@
     {
         _resolvedPlayer1 = Current.Player1Id is int id1 ? DbContext.Players.FirstOrDefault(p => p.Id == id1) : null;
         _resolvedPlayer2 = Current.Player2Id is int id2 ? DbContext.Players.FirstOrDefault(p => p.Id == id2) : null;
+        _resolvedTeam1 = _resolvedPlayer1?.TeamId is int teamId1 ? DbContext.Teams.FirstOrDefault(t => t.Id == teamId1) : null;
+        _resolvedTeam2 = _resolvedPlayer2?.TeamId is int teamId2 ? DbContext.Teams.FirstOrDefault(t => t.Id == teamId2) : null;
     }
+
+    private string? GetTeamName(int slot) => (slot == 1 ? _resolvedTeam1 : _resolvedTeam2)?.Name;
 
     private string GetDisplayName(int slot)
     {
@@ -581,6 +595,19 @@
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        if (e.Key is "Backspace")
+        {
+            if (_showWarmupPicker)
+            {
+                CloseWarmupPicker();
+            }
+            else if (_showPlayerPicker is not null)
+            {
+                ClosePlayerPicker();
+            }
+            return;
+        }
+
         if (e.Key is "p" or "P" or "0" or "Insert")
         {
             await OpenPlayerPickerAsync(Current.ActivePlayer);
@@ -695,6 +722,9 @@
                     StartWarmup(warmupMinutes);
                 }
                 break;
+            case ScoreboardCommand.AddTeam:
+                AddOrUpdateTeamFromPayload(payload);
+                break;
         }
     }
 
@@ -756,7 +786,9 @@
                 Nickname = data.Nickname ?? "",
                 Name = data.Name ?? "",
                 PhotoPath = photoPath,
-                AvatarId = Random.Shared.Next(0, AvatarGenerator.Count)
+                AvatarId = data.Avatar is not null ? AvatarGenerator.SeedFromName(data.Avatar) : Random.Shared.Next(0, AvatarGenerator.Count),
+                AvatarName = data.Avatar,
+                TeamId = data.TeamId
             });
         }
         else
@@ -764,9 +796,48 @@
             if (data.Nickname is not null) existing.Nickname = data.Nickname;
             if (data.Name is not null) existing.Name = data.Name;
             if (photoPath is not null) existing.PhotoPath = photoPath;
+            if (data.Avatar is not null)
+            {
+                existing.AvatarId = AvatarGenerator.SeedFromName(data.Avatar);
+                existing.AvatarName = data.Avatar;
+            }
+            if (data.TeamId is not null) existing.TeamId = data.TeamId;
         }
 
         ResolvePlayers();
+    }
+
+    private void AddOrUpdateTeamFromPayload(JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } element)
+        {
+            return;
+        }
+
+        TeamAddPayload? data;
+        try
+        {
+            data = element.Deserialize<TeamAddPayload>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (data is null)
+        {
+            return;
+        }
+
+        var existing = DbContext.Teams.FirstOrDefault(t => t.Id == data.Id);
+        if (existing is null)
+        {
+            DbContext.Teams.Add(new Team { Id = data.Id, Name = data.Name });
+        }
+        else
+        {
+            existing.Name = data.Name;
+        }
     }
 
     private void OnRemoteCommand(IReadOnlyList<ScoreboardCommandMessage> messages)

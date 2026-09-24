@@ -21,7 +21,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-Directory.CreateDirectory(Path.Combine(app.Environment.WebRootPath, "Players"));
+app.Environment.WebRootPath = Directory.GetCurrentDirectory();
 
 if (app.Environment.IsDevelopment())
 {

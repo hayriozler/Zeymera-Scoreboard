@@ -16,8 +16,13 @@ public static class TeamsEndpoints
         group.MapGet("/", async (ScoreboardDbContext db, HttpContext context) =>
         {
             var clientId = context.GetClientId()!;
-            var teams = await db.TeamSet
-                .Where(t => t.ClientId == clientId)
+            var clubId = context.GetClubId();
+
+            var query = clubId is null
+                ? db.TeamSet.Where(t => t.ClientId == clientId)
+                : db.TeamSet.Where(t => db.ClientSet.Any(c => c.Id == t.ClientId && c.ClubId == clubId));
+
+            var teams = await query
                 .OrderBy(t => t.ExternalId)
                 .Include(t => t.TeamPlayers)
                 .ThenInclude(tp => tp.Player)
@@ -128,5 +133,5 @@ public static class TeamsEndpoints
 
     private static TeamDto ToDto(Team team) => new(
         team.Id, team.ClientId, team.ExternalId, team.Name, team.UpdatedAt,
-        team.TeamPlayers.Select(tp => new TeamPlayerDto(tp.Player!.ExternalId, tp.Player.Nickname, tp.Player.Name)).ToList());
+        team.TeamPlayers.Select(tp => new TeamPlayerDto(tp.Player!.Id, tp.Player.ExternalId, tp.Player.Nickname, tp.Player.Name)).ToList());
 }
