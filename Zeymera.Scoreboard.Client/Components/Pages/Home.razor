@@ -12,6 +12,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.EntityFrameworkCore
 @using System.Text.Json
+@using System.Net.WebSockets
 
 <div @ref="board" class="board" tabindex="0" @onkeydown="HandleKeyDown" @onclick="RequestFullscreenAsync">
 
@@ -160,12 +161,36 @@
         <div class="controls-overlay" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
             <div class="control-group">
                 <span>@L.T("Player1Label")</span>
+                @if (!string.IsNullOrEmpty(GetPhotoPath(1)))
+                {
+                    <img class="player-photo" src="@GetPhotoPath(1)" alt="" />
+                }
+                @if (GetAvatarDataUri(1) is { } avatarControl1)
+                {
+                    <img class="player-photo" src="@avatarControl1" alt="" />
+                }
+                else
+                {
+                    <div class="player-avatar-fallback" style="background:@GetAvatarColor(1)">@GetAvatarInitials(1)</div>
+                }
                 <input type="text" value="@Current.Player1Name" placeholder="@L.T("Player1Default")"
                        @onchange="e => DispatchAsync(ScoreboardCommand.RenamePlayer1, e.Value?.ToString())" />
                 <button @onclick="() => OpenPlayerPickerAsync(1)">@L.T("ChoosePlayer")</button>
             </div>
             <div class="control-group">
                 <span>@L.T("Player2Label")</span>
+                @if (!string.IsNullOrEmpty(GetPhotoPath(2)))
+                {
+                    <img class="player-photo" src="@GetPhotoPath(2)" alt="" />
+                }
+                @if (GetAvatarDataUri(2) is { } avatarControl2)
+                {
+                    <img class="player-photo" src="@avatarControl2" alt="" />
+                }
+                else
+                {
+                    <div class="player-avatar-fallback" style="background:@GetAvatarColor(2)">@GetAvatarInitials(2)</div>
+                }
                 <input type="text" value="@Current.Player2Name" placeholder="@L.T("Player2Default")"
                        @onchange="e => DispatchAsync(ScoreboardCommand.RenamePlayer2, e.Value?.ToString())" />
                 <button @onclick="() => OpenPlayerPickerAsync(2)">@L.T("ChoosePlayer")</button>
@@ -214,7 +239,7 @@
                 <a href="/matches">Match History</a>
             </div>
             <div class="control-group">
-                <button @onclick="() => DispatchAsync(ScoreboardCommand.EndGame)">End Game</button>
+                <button @onclick="() => DispatchAsync(ScoreboardCommand.EndGame)" disabled="@_gameEnded">End Game</button>
                 <button @onclick="() => DispatchAsync(ScoreboardCommand.NewGame)">New Game</button>
             </div>
             <p class="hint">@L.T("ControlsHint")</p>
@@ -416,6 +441,42 @@
 
     private void StartWarmup(int minutes) => Nav.NavigateTo($"/warmup/{minutes}");
 
+    private void SetPlayerFromRemotePayload(int slot, JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } element)
+        {
+            return;
+        }
+
+        SetPlayerPayload? data;
+        try
+        {
+            data = element.Deserialize<SetPlayerPayload>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (data is null)
+        {
+            return;
+        }
+
+        var player = DbContext.Players.FirstOrDefault(p => p.RemoteId == data.Id);
+        if (player is null && data.ShortcutNumber is not null)
+        {
+            player = DbContext.Players.FirstOrDefault(p => p.ShortcutNumber == data.ShortcutNumber);
+        }
+
+        if (player is null)
+        {
+            return;
+        }
+
+        SelectRosterPlayer(slot, player.Id);
+    }
+
     private void SelectRosterPlayer(int slot, int playerId)
     {
         if (slot == 1) Current.Player1Id = playerId; else Current.Player2Id = playerId;
@@ -431,19 +492,19 @@
     }
 
     private void Adjust() => StateHasChanged();
-    private async Task PersistAsync()
+    private async Task PersistAsync(WebSocket? excludeSocket = null)
     {
         await DbContext.SaveChangesAsync();
         StateHasChanged();
-        await BroadcastStateAsync();
+        await BroadcastStateAsync(excludeSocket);
     }
 
-    private async Task BroadcastStateAsync()
+    private async Task BroadcastStateAsync(WebSocket? excludeSocket = null)
     {
         try
         {
             var snapshot = ScoreboardStateSnapshotFactory.Create(Current, _resolvedPlayer1, _resolvedPlayer2);
-            await Hub.BroadcastStateAsync(snapshot);
+            await Hub.BroadcastStateAsync(snapshot, excludeSocket);
         }
         catch
         {
@@ -545,8 +606,15 @@
         RecalculateAverages();
     }
 
+    private bool _gameEnded;
+
     private void EndGame()
     {
+        if (_gameEnded)
+        {
+            return;
+        }
+
         var winner = Current.Player1Score > Current.Player2Score ? 1
             : Current.Player2Score > Current.Player1Score ? 2
             : 0;
@@ -570,10 +638,12 @@
         });
 
         Current.ShotClockActive = false;
+        _gameEnded = true;
     }
 
     private void NewGame()
     {
+        _gameEnded = false;
         Current.Player1Score = 0;
         Current.Player2Score = 0;
         Current.Player1Avg = 0;
@@ -595,6 +665,11 @@
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        if (_gameEnded)
+        {
+            return;
+        }
+
         if (e.Key is "Backspace")
         {
             if (_showWarmupPicker)
@@ -725,6 +800,12 @@
             case ScoreboardCommand.AddTeam:
                 AddOrUpdateTeamFromPayload(payload);
                 break;
+            case ScoreboardCommand.SetPlayer1:
+                SetPlayerFromRemotePayload(1, payload);
+                break;
+            case ScoreboardCommand.SetPlayer2:
+                SetPlayerFromRemotePayload(2, payload);
+                break;
         }
     }
 
@@ -777,18 +858,22 @@
             photoPath = $"Players/{fileName}";
         }
 
-        var existing = DbContext.Players.FirstOrDefault(p => p.Id == data.Id);
+        var localTeamId = data.TeamId is int remoteTeamId
+            ? DbContext.Teams.FirstOrDefault(t => t.RemoteId == remoteTeamId)?.Id
+            : null;
+
+        var existing = DbContext.Players.FirstOrDefault(p => p.RemoteId == data.Id);
         if (existing is null)
         {
             DbContext.Players.Add(new Player
             {
-                Id = data.Id,
+                RemoteId = data.Id,
                 Nickname = data.Nickname ?? "",
                 Name = data.Name ?? "",
                 PhotoPath = photoPath,
                 AvatarId = data.Avatar is not null ? AvatarGenerator.SeedFromName(data.Avatar) : Random.Shared.Next(0, AvatarGenerator.Count),
                 AvatarName = data.Avatar,
-                TeamId = data.TeamId,
+                TeamId = localTeamId,
                 ShortcutNumber = data.ShortcutNumber
             });
         }
@@ -802,7 +887,7 @@
                 existing.AvatarId = AvatarGenerator.SeedFromName(data.Avatar);
                 existing.AvatarName = data.Avatar;
             }
-            if (data.TeamId is not null) existing.TeamId = data.TeamId;
+            if (localTeamId is not null) existing.TeamId = localTeamId;
             if (data.ShortcutNumber is not null) existing.ShortcutNumber = data.ShortcutNumber;
         }
 
@@ -831,10 +916,10 @@
             return;
         }
 
-        var existing = DbContext.Teams.FirstOrDefault(t => t.Id == data.Id);
+        var existing = DbContext.Teams.FirstOrDefault(t => t.RemoteId == data.Id);
         if (existing is null)
         {
-            DbContext.Teams.Add(new Team { Id = data.Id, Name = data.Name });
+            DbContext.Teams.Add(new Team { RemoteId = data.Id, Name = data.Name });
         }
         else
         {
@@ -842,12 +927,12 @@
         }
     }
 
-    private void OnRemoteCommand(IReadOnlyList<ScoreboardCommandMessage> messages)
+    private void OnRemoteCommand(WebSocket sender, IReadOnlyList<ScoreboardCommandMessage> messages)
     {
-        InvokeAsync(() => ApplyCommandsAsync(messages));
+        InvokeAsync(() => ApplyCommandsAsync(messages, sender));
     }
 
-    private async Task ApplyCommandsAsync(IReadOnlyList<ScoreboardCommandMessage> messages)
+    private async Task ApplyCommandsAsync(IReadOnlyList<ScoreboardCommandMessage> messages, WebSocket? sender = null)
     {
         if (messages.Count == 0)
         {
@@ -859,7 +944,8 @@
             ApplyCommand(message.Command, message.Payload);
         }
 
-        await PersistAsync();
+        var excludeSender = sender is not null && messages.Any(m => ScoreboardCommandReplyPolicy.ExcludesSender(m.Command));
+        await PersistAsync(excludeSender ? sender : null);
     }
 
     private Task DispatchAsync(ScoreboardCommand command, object? payload = null) =>

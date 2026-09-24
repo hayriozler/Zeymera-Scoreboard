@@ -65,8 +65,12 @@ public static class ScoreboardWebSocketEndpoint
                     var messages = ScoreboardCommandParser.TryParse(text);
                     if (messages.Count > 0)
                     {
-                        logger.LogInformation("[#{Seq}] Parsed {Count} command(s) from {RemoteIp}: {Commands}", seq, messages.Count, remoteIp, string.Join(", ", messages.Select(m => m.Command)));
-                        hub.Publish(messages);
+                        if (logger.IsEnabled(LogLevel.Information))
+                        {
+                            logger.LogInformation("[#{Seq}] Parsed {Count} command(s) from {RemoteIp}: {Commands}", seq, messages.Count, remoteIp, string.Join(", ", messages.Select(m => m.Command)));
+                        }
+
+                        hub.Publish(socket, messages);
                     }
                     else
                     {

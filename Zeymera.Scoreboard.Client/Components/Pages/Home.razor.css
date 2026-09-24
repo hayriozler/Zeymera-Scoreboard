@@ -237,7 +237,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: clamp(6rem, 16vw, 15rem);
+    font-size: clamp(6rem, 22vw, 22rem);
     font-weight: 800;
     color: var(--white);
     line-height: 1;

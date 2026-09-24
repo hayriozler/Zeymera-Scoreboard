@@ -27,4 +27,7 @@ public class MatchResult
 
     /// <summary>1 or 2, or 0 for a tie.</summary>
     public int Winner { get; set; }
+
+    public bool SyncedAPI { get; set; }
+    public bool SyncedWS { get; set; }
 }

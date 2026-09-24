@@ -7,3 +7,5 @@ public record ScoreboardCommandMessage(ScoreboardCommand Command, JsonElement? P
 public record PlayerUpsertPayload(int Id, string? Nickname = null, string? Name = null, string? PhotoBase64 = null, string? PhotoExtension = null, string? Avatar = null, int? TeamId = null, int? ShortcutNumber = null);
 
 public record TeamAddPayload(int Id, string Name);
+
+public record SetPlayerPayload(int Id, int? ShortcutNumber = null);

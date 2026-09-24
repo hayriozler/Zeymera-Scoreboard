@@ -25,4 +25,21 @@ public enum ScoreboardCommand
     ClearRosterPlayer2,
     WarmUp,
     AddTeam,
+    SetPlayer1,
+    SetPlayer2,
+}
+
+public static class ScoreboardCommandReplyPolicy
+{
+    private static readonly HashSet<ScoreboardCommand> ExcludeSenderFromBroadcast =
+    [
+        ScoreboardCommand.IncrementPoints,
+        ScoreboardCommand.DecrementPoints,
+        ScoreboardCommand.UpsertPlayer,
+        ScoreboardCommand.AddTeam,
+        ScoreboardCommand.SetPlayer1,
+        ScoreboardCommand.SetPlayer2,
+    ];
+
+    public static bool ExcludesSender(ScoreboardCommand command) => ExcludeSenderFromBroadcast.Contains(command);
 }

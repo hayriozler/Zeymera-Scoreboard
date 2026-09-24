@@ -43,35 +43,13 @@ static LogEventLevel ParseLogLevel(string? value) => value?.ToLowerInvariant() s
     _ => LogEventLevel.Information,
 };
 
-static void EnsureColumn(DbContext db, string table, string column, string sqlType)
-{
-    using var checkCommand = db.Database.GetDbConnection().CreateCommand();
-    checkCommand.CommandText = $"PRAGMA table_info({table});";
-    checkCommand.Connection!.Open();
-    using (var reader = checkCommand.ExecuteReader())
-    {
-        while (reader.Read())
-        {
-            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-        }
-    }
-
-#pragma warning disable EF1002
-    db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {column} {sqlType};");
-#pragma warning restore EF1002
-}
-
-// Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 string folder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "Db");
 if (!Directory.Exists(folder))
     Directory.CreateDirectory(folder);
-var dbName = Path.Combine(folder, "scoreboard.db");
+var dbName = Path.Combine(folder, "scoreboard.db3");
 
 string playerPhotosFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "Players");
 if (!Directory.Exists(playerPhotosFolder))
@@ -87,6 +65,7 @@ builder.Services.AddHttpClient(nameof(RemoteSyncService));
 builder.Services.AddHostedService<RemoteSyncService>();
 builder.Services.AddHttpClient(nameof(RemotePullService));
 builder.Services.AddHostedService<RemotePullService>();
+builder.Services.AddHostedService<RemoteWsPushService>();
 
 var app = builder.Build();
 app.UseAntiforgery();
@@ -125,10 +104,14 @@ using (var scope = app.Services.CreateScope())
             Id INTEGER PRIMARY KEY,
             Nickname TEXT NOT NULL,
             Name TEXT NOT NULL DEFAULT '',
+            RemoteId INTEGER NULL,
             PhotoPath TEXT NULL,
             AvatarId INTEGER NULL,
             AvatarName TEXT NULL,
-            Synced INTEGER NOT NULL DEFAULT 0
+            TeamId INTEGER NULL,
+            ShortcutNumber INTEGER NULL,
+            SyncedAPI INTEGER NOT NULL DEFAULT 0,
+            SyncedWS INTEGER NOT NULL DEFAULT 0
         );
         """);
 
@@ -149,7 +132,9 @@ using (var scope = app.Services.CreateScope())
             Player2HighRun INTEGER NOT NULL,
             Inning INTEGER NOT NULL,
             MatchTarget INTEGER NOT NULL,
-            Winner INTEGER NOT NULL
+            Winner INTEGER NOT NULL,
+            SyncedAPI INTEGER NOT NULL DEFAULT 0,
+            SyncedWS INTEGER NOT NULL DEFAULT 0
         );
         """);
 
@@ -157,14 +142,12 @@ using (var scope = app.Services.CreateScope())
         CREATE TABLE IF NOT EXISTS team (
             Id INTEGER PRIMARY KEY,
             Name TEXT NOT NULL DEFAULT '',
-            RemoteId INTEGER NULL
+            RemoteId INTEGER NULL,
+            SyncedAPI INTEGER NOT NULL DEFAULT 0,
+            SyncedWS INTEGER NOT NULL DEFAULT 0
         );
         """);
 
-    EnsureColumn(db, "player", "TeamId", "INTEGER NULL");
-    EnsureColumn(db, "player", "RemoteId", "INTEGER NULL");
-    EnsureColumn(db, "player", "AvatarName", "TEXT NULL");
-    EnsureColumn(db, "player", "ShortcutNumber", "INTEGER NULL");
 }
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

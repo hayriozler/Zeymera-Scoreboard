@@ -13,17 +13,21 @@ public class ScoreboardCommandHub(ILogger<ScoreboardCommandHub> logger)
     private readonly ConcurrentDictionary<WebSocket, Connection> _sockets = new();
     private long _sequence;
 
-    public event Action<IReadOnlyList<ScoreboardCommandMessage>>? CommandReceived;
+    public event Action<WebSocket, IReadOnlyList<ScoreboardCommandMessage>>? CommandReceived;
     public event Action? ConnectionChanged;
 
     public bool HasActiveConnection => !_sockets.IsEmpty;
 
     public long NextSequence() => Interlocked.Increment(ref _sequence);
 
-    public void Publish(IReadOnlyList<ScoreboardCommandMessage> messages)
+    public void Publish(WebSocket sender, IReadOnlyList<ScoreboardCommandMessage> messages)
     {
-        logger.LogInformation("Publishing {Count} command(s) to the board: {Commands}", messages.Count, string.Join(", ", messages.Select(m => m.Command)));
-        CommandReceived?.Invoke(messages);
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            logger.LogInformation("Publishing {Count} command(s) to the board: {Commands}", messages.Count, string.Join(", ", messages.Select(m => m.Command)));
+        }
+
+        CommandReceived?.Invoke(sender, messages);
     }
 
     public void ControllerConnected(WebSocket socket, string remoteIp)
@@ -88,15 +92,31 @@ public class ScoreboardCommandHub(ILogger<ScoreboardCommandHub> logger)
         }
     }
 
-    public async Task BroadcastStateAsync(ScoreboardStateSnapshot snapshot)
+    public async Task BroadcastStateAsync(ScoreboardStateSnapshot snapshot, WebSocket? excludeSocket = null)
     {
-        if (_sockets.IsEmpty)
+        var targets = _sockets.Keys.Where(socket => socket != excludeSocket).ToList();
+        if (targets.Count == 0)
         {
             return;
         }
 
         var json = ScoreboardStateSnapshotFactory.ToWireJson(snapshot);
-        logger.LogInformation("Broadcasting state to {Count} client(s): {RemoteIps}", _sockets.Count, string.Join(", ", _sockets.Values.Select(c => c.RemoteIp)));
-        await Task.WhenAll(_sockets.Keys.Select(socket => SendAsync(socket, json)));
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            logger.LogInformation("Broadcasting state to {Count} client(s): {RemoteIps}", targets.Count, string.Join(", ", targets.Select(socket => _sockets[socket].RemoteIp)));
+        }
+
+        await Task.WhenAll(targets.Select(socket => SendAsync(socket, json)));
+    }
+
+    public async Task BroadcastJsonAsync(string json)
+    {
+        var targets = _sockets.Keys.ToList();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        await Task.WhenAll(targets.Select(socket => SendAsync(socket, json)));
     }
 }

@@ -36,6 +36,12 @@ public static class ScoreboardCommandParser
                     {
                         messages.Add(message);
                     }
+                    else if (item.ValueKind == JsonValueKind.String &&
+                        item.GetString() is { } commandName &&
+                        Enum.TryParse<ScoreboardCommand>(commandName, ignoreCase: true, out var command))
+                    {
+                        messages.Add(new ScoreboardCommandMessage(command));
+                    }
                 }
 
                 return messages;

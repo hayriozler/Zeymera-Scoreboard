@@ -147,7 +147,12 @@
         _running = true;
     }
 
-    private void GoBack() => Nav.NavigateTo("/");
+    private void GoBack()
+    {
+        _running = false;
+        CancelAutoReturn();
+        Nav.NavigateTo("/");
+    }
 
     private Task HandleKeyDown(KeyboardEventArgs e)
     {

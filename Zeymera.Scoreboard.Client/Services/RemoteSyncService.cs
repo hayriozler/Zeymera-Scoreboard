@@ -60,12 +60,41 @@ public class RemoteSyncService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         await PushPlayersAsync(db, http, ct);
+        await PushTeamsAsync(db, http, ct);
         await PushStatsAsync(db, http, ct);
+        await CleanupSyncedMatchesAsync(db, ct);
+    }
+
+    private async Task PushTeamsAsync(DataContext db, HttpClient http, CancellationToken ct)
+    {
+        var pending = await db.Teams.Where(t => !t.SyncedAPI).ToListAsync(ct);
+        foreach (var team in pending)
+        {
+            var payload = new
+            {
+                id = team.Id,
+                name = team.Name
+            };
+
+            logger.LogInformation("SEND team {TeamId} to teams: {Name}", team.Id, team.Name);
+            var response = await http.PostAsJsonAsync("teams", payload, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            logger.LogInformation("RECEIVED response for team {TeamId}: {Status} {Body}", team.Id, response.StatusCode, body);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Push team {TeamId} failed: {Status}", team.Id, response.StatusCode);
+                continue;
+            }
+
+            team.SyncedAPI = true;
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     private async Task PushPlayersAsync(DataContext db, HttpClient http, CancellationToken ct)
     {
-        var pending = await db.Players.Where(p => !p.Synced).ToListAsync(ct);
+        var pending = await db.Players.Where(p => !p.SyncedAPI).ToListAsync(ct);
         foreach (var player in pending)
         {
             string? photoBase64 = null;
@@ -90,21 +119,26 @@ public class RemoteSyncService(
                 photoExtension
             };
 
+            logger.LogInformation("SEND player {PlayerId} to players: nickname={Nickname} name={Name} avatarId={AvatarId} photoBytes={PhotoBytes}",
+                player.Id, player.Nickname, player.Name, player.AvatarId, photoBase64?.Length ?? 0);
             var response = await http.PostAsJsonAsync("players", payload, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            logger.LogInformation("RECEIVED response for player {PlayerId}: {Status} {Body}", player.Id, response.StatusCode, body);
+
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("Push player {PlayerId} failed: {Status}", player.Id, response.StatusCode);
                 continue;
             }
 
-            player.Synced = true;
+            player.SyncedAPI = true;
             await db.SaveChangesAsync(ct);
         }
     }
 
     private async Task PushStatsAsync(DataContext db, HttpClient http, CancellationToken ct)
     {
-        var pending = await db.MatchResults.ToListAsync(ct);
+        var pending = await db.MatchResults.Where(m => !m.SyncedAPI).ToListAsync(ct);
         foreach (var match in pending)
         {
             var payload = new
@@ -125,15 +159,32 @@ public class RemoteSyncService(
                 playedAt = match.PlayedAt
             };
 
+            logger.LogInformation("SEND stats for match {MatchId} to stats: {Player1Name}({Player1Score}) vs {Player2Name}({Player2Score}) winner={Winner}",
+                match.Id, match.Player1Name, match.Player1Score, match.Player2Name, match.Player2Score, match.Winner);
             var response = await http.PostAsJsonAsync("stats", payload, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            logger.LogInformation("RECEIVED response for match {MatchId}: {Status} {Body}", match.Id, response.StatusCode, body);
+
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("Push stats for match {MatchId} failed: {Status}", match.Id, response.StatusCode);
                 continue;
             }
 
-            db.MatchResults.Remove(match);
+            match.SyncedAPI = true;
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    private static async Task CleanupSyncedMatchesAsync(DataContext db, CancellationToken ct)
+    {
+        var finished = await db.MatchResults.Where(m => m.SyncedAPI && m.SyncedWS).ToListAsync(ct);
+        if (finished.Count == 0)
+        {
+            return;
+        }
+
+        db.MatchResults.RemoveRange(finished);
+        await db.SaveChangesAsync(ct);
     }
 }

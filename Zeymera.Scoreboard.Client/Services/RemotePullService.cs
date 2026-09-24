@@ -67,9 +67,11 @@ public class RemotePullService(
         await PullPlayersAsync(db, http, ct);
         await PullTeamsAsync(db, http, ct);
     }
-    private static async Task PullTeamsAsync(DataContext db, HttpClient http, CancellationToken ct)
+    private async Task PullTeamsAsync(DataContext db, HttpClient http, CancellationToken ct)
     {
+        logger.LogInformation("SEND GET teams request");
         var remoteTeams = await http.GetFromJsonAsync<List<RemoteTeam>>("teams", _jsonOptions, ct);
+        logger.LogInformation("RECEIVED {Count} team(s) from remote", remoteTeams?.Count ?? 0);
         if (remoteTeams is null)
         {
             return;
@@ -80,7 +82,7 @@ public class RemotePullService(
             var team = await db.Teams.FirstOrDefaultAsync(t => t.RemoteId == remote.Id, ct);
             if (team is null)
             {
-                team = new Team { RemoteId = remote.Id };
+                team = new Team { RemoteId = remote.Id, SyncedAPI = true };
                 db.Teams.Add(team);
             }
 
@@ -106,7 +108,9 @@ public class RemotePullService(
 
     private async Task PullPlayersAsync(DataContext db, HttpClient http, CancellationToken ct)
     {
+        logger.LogInformation("SEND GET players request");
         var remotePlayers = await http.GetFromJsonAsync<List<RemotePlayer>>("players", _jsonOptions, ct);
+        logger.LogInformation("RECEIVED {Count} player(s) from remote", remotePlayers?.Count ?? 0);
         if (remotePlayers is null)
         {
             return;
@@ -131,13 +135,13 @@ public class RemotePullService(
 
         if (player is null)
         {
-            player = new Player { Synced = true };
+            player = new Player { SyncedAPI = true };
             db.Players.Add(player);
         }
 
         player.RemoteId = remote.Id;
 
-        if (player.Synced)
+        if (player.SyncedAPI)
         {
             player.Nickname = remote.Nickname;
             player.Name = remote.Name;
