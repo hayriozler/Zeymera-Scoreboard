@@ -20,6 +20,10 @@
             <InputText id="player-name" @bind-Value="_form.Name" />
         </div>
         <div class="form-field">
+            <label for="player-shortcut">Shortcut number</label>
+            <InputNumber id="player-shortcut" @bind-Value="_form.ShortcutNumber" />
+        </div>
+        <div class="form-field">
             <label for="player-photo">Photo</label>
             <InputFile id="player-photo" OnChange="OnPhotoSelected" accept="image/*" />
         </div>
@@ -79,6 +83,7 @@
                     <th>Id</th>
                     <th>Nickname</th>
                     <th>Name</th>
+                    <th>Shortcut #</th>
                     <th></th>
                 </tr>
             </thead>
@@ -99,6 +104,7 @@
                         <td>@p.Id</td>
                         <td>@p.Nickname</td>
                         <td>@p.Name</td>
+                        <td>@p.ShortcutNumber</td>
                         <td>
                             <div class="row-actions">
                                 <button @onclick="() => EditPlayer(p)">Edit</button>
@@ -142,7 +148,8 @@
             Id = player.Id,
             Nickname = player.Nickname,
             Name = player.Name,
-            AvatarId = player.AvatarId ?? Random.Shared.Next(0, AvatarGenerator.Count)
+            AvatarId = player.AvatarId ?? Random.Shared.Next(0, AvatarGenerator.Count),
+            ShortcutNumber = player.ShortcutNumber
         };
         _selectedPhoto = null;
         _errorMessage = null;
@@ -170,7 +177,7 @@
             Player player;
             if (_form.Id == 0)
             {
-                player = new Player { Nickname = _form.Nickname, Name = _form.Name, AvatarId = _form.AvatarId };
+                player = new Player { Nickname = _form.Nickname, Name = _form.Name, AvatarId = _form.AvatarId, ShortcutNumber = _form.ShortcutNumber };
                 DbContext.Players.Add(player);
                 await DbContext.SaveChangesAsync(); // assigns player.Id
             }
@@ -181,6 +188,7 @@
                 player.Nickname = _form.Nickname;
                 player.Name = _form.Name;
                 player.AvatarId = _form.AvatarId;
+                player.ShortcutNumber = _form.ShortcutNumber;
             }
 
             if (_selectedPhoto is not null)
@@ -235,5 +243,6 @@
         public string Nickname { get; set; } = "";
         public string Name { get; set; } = "";
         public int? AvatarId { get; set; }
+        public int? ShortcutNumber { get; set; }
     }
 }

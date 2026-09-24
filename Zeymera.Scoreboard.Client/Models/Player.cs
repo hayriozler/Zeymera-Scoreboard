@@ -11,4 +11,5 @@ public class Player
     public bool Synced { get; set; }
     public int? TeamId { get; set; }
     public int? RemoteId { get; set; }
+    public int? ShortcutNumber { get; set; }
 }

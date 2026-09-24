@@ -452,9 +452,9 @@
     }
     private void SetPlayerName(int slot, string? name)
     {
-        if (int.TryParse(name, out var maybePlayerId))
+        if (int.TryParse(name, out var maybeShortcutNumber))
         {
-            var player = DbContext.Players.FirstOrDefault(p => p.Id == maybePlayerId);
+            var player = DbContext.Players.FirstOrDefault(p => p.ShortcutNumber == maybeShortcutNumber);
             if (player is not null)
             {
                 SelectRosterPlayer(slot, player.Id);
@@ -788,7 +788,8 @@
                 PhotoPath = photoPath,
                 AvatarId = data.Avatar is not null ? AvatarGenerator.SeedFromName(data.Avatar) : Random.Shared.Next(0, AvatarGenerator.Count),
                 AvatarName = data.Avatar,
-                TeamId = data.TeamId
+                TeamId = data.TeamId,
+                ShortcutNumber = data.ShortcutNumber
             });
         }
         else
@@ -802,6 +803,7 @@
                 existing.AvatarName = data.Avatar;
             }
             if (data.TeamId is not null) existing.TeamId = data.TeamId;
+            if (data.ShortcutNumber is not null) existing.ShortcutNumber = data.ShortcutNumber;
         }
 
         ResolvePlayers();

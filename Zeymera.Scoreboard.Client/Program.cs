@@ -164,6 +164,7 @@ using (var scope = app.Services.CreateScope())
     EnsureColumn(db, "player", "TeamId", "INTEGER NULL");
     EnsureColumn(db, "player", "RemoteId", "INTEGER NULL");
     EnsureColumn(db, "player", "AvatarName", "TEXT NULL");
+    EnsureColumn(db, "player", "ShortcutNumber", "INTEGER NULL");
 }
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
