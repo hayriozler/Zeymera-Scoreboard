@@ -61,7 +61,6 @@ var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7153/
 builder.Services.AddDbContextFactory<DataContext>(options => options.UseSqlite($"Data Source={dbName}"));
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 builder.Services.AddScoped<LocalizationService>();
-builder.Services.AddScoped<BluetoothService>();
 builder.Services.AddSingleton<WebSocketService>();
 builder.Services.AddSingleton<ScoreboardCommandHub>();
 builder.Services.Configure<RemoteSyncOptions>(builder.Configuration.GetSection("RemoteSync"));

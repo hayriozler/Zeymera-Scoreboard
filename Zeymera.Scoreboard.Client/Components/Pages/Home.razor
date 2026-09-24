@@ -6,7 +6,6 @@
 @inject HttpClient Http
 @inject DataContext DbContext
 @inject ScoreboardCommandHub Hub
-@inject BluetoothService Bluetooth
 @inject IWebHostEnvironment Env
 @using Zeymera.Scoreboard.Client.Models
 @using Zeymera.Scoreboard.Client.Services
@@ -203,18 +202,6 @@
                 </select>
             </div>
             <div class="control-group">
-                <span>Bluetooth</span>
-                @if (Bluetooth.IsConnected)
-                {
-                    <span>@(Bluetooth.DeviceName ?? "Remote connected")</span>
-                    <button @onclick="() => Bluetooth.DisconnectAsync()">Disconnect</button>
-                }
-                else
-                {
-                    <button @onclick="() => Bluetooth.ConnectAsync()">Pair remote</button>
-                }
-            </div>
-            <div class="control-group">
                 <a href="/players">Manage Players</a>
                 <a href="/matches">Match History</a>
             </div>
@@ -305,8 +292,6 @@
         L.LanguageChanged += Adjust;
         Hub.CommandReceived += OnRemoteCommand;
         Hub.ConnectionChanged += OnHubConnectionChanged;
-        Bluetooth.CommandReceived += OnBluetoothCommandReceived;
-        Bluetooth.ConnectionChanged += OnBluetoothConnectionChanged;
         IsOnline = Hub.HasActiveConnection;
         _ = RunShotClockAsync(_shotClockCts.Token);
         var game = await DbContext.ScoreboardStates.Where(p => p.Id == 1).FirstOrDefaultAsync();
@@ -828,16 +813,6 @@
         await board.FocusAsync();
     }
 
-    private void OnBluetoothCommandReceived(IReadOnlyList<ScoreboardCommandMessage> messages)
-    {
-        InvokeAsync(() => ApplyCommandsAsync(messages));
-    }
-
-    private void OnBluetoothConnectionChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
-
     private async Task RunShotClockAsync(CancellationToken token)
     {
         try
@@ -868,8 +843,6 @@
         L.LanguageChanged -= Adjust;
         Hub.CommandReceived -= OnRemoteCommand;
         Hub.ConnectionChanged -= OnHubConnectionChanged;
-        Bluetooth.CommandReceived -= OnBluetoothCommandReceived;
-        Bluetooth.ConnectionChanged -= OnBluetoothConnectionChanged;
         if (_shotClockCts is not null)
         {
             _shotClockCts.Cancel();

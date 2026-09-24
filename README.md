@@ -22,7 +22,7 @@ Click anywhere on the board to enter fullscreen kiosk mode.
 
 ## Keyboard shortcuts
 
-Every shortcut also has a numpad-friendly alternate, so a bare Bluetooth numeric keypad (no letter keys) can drive the whole board — including its NumLock-off equivalent, since a BLE keypad's NumLock state isn't something the app controls.
+Every shortcut also has a numpad-friendly alternate, so a bare numeric keypad (no letter keys) can drive the whole board — including its NumLock-off equivalent, since the keypad's NumLock state isn't something the app controls.
 
 | Key | Numpad alternate | NumLock-off equivalent | Action |
 |---|---|---|---|
@@ -38,7 +38,7 @@ The warm-up timer page (`/warmup/{minutes}`) has its own shortcuts: `T`/`3`/Page
 
 ## Remote control input
 
-The scoreboard accepts the same commands from three sources. Every one of them ends up calling `Home.razor`'s `ApplyCommandsAsync` with a list of one or more `ScoreboardCommandMessage`s — that's the *only* place that ever saves to the database or broadcasts, applying every command in the list first and persisting/broadcasting exactly once at the end, regardless of how many commands arrived together. The on-screen buttons dispatch through this same path too (via a small `DispatchAsync(command, payload)` helper) rather than mutating state directly, so a button click and a remote command behave identically.
+The scoreboard accepts the same commands from two sources. Every one of them ends up calling `Home.razor`'s `ApplyCommandsAsync` with a list of one or more `ScoreboardCommandMessage`s — that's the *only* place that ever saves to the database or broadcasts, applying every command in the list first and persisting/broadcasting exactly once at the end, regardless of how many commands arrived together. The on-screen buttons dispatch through this same path too (via a small `DispatchAsync(command, payload)` helper) rather than mutating state directly, so a button click and a remote command behave identically.
 
 1. **Keyboard**, as above — each keypress becomes a one-command list.
 2. **WebSocket** — a control app connects to `ws://<host>:<port>/ws` and sends a JSON envelope as a UTF-8 text frame. `Models/ScoreboardCommandParser.cs` accepts three shapes:
@@ -114,7 +114,6 @@ The scoreboard accepts the same commands from three sources. Every one of them e
    ws.send(JSON.stringify({ commands: [{ command: "SelectPlayer1" }, { command: "AdjustPoints", payload: 3 }, { command: "CommitPoints" }] }));
    ```
    The sync-dot on the board reflects whether a control connection is currently active.
-3. **Bluetooth (Web Bluetooth)** — "Pair remote" in the controls overlay connects to a BLE peripheral over `wwwroot/js/bluetooth.js`. This only works against a **custom** GATT service; browsers block the standard HID-over-GATT profile, so a generic BLE pedal/keyboard won't pair this way (pair it at the OS level instead — it'll fire keydown events, which are already wired up). The remote sends the exact same envelope as the WebSocket channel (bare command name or the JSON form). Note a full player photo is a lot of data for typical BLE notify MTU sizes — that payload is realistically better suited to the WebSocket channel unless your firmware chunks/reassembles large messages. The service/characteristic UUIDs in `bluetooth.js` are placeholders (Nordic UART Service convention) — replace them with your device's actual UUIDs.
 
 ## Player roster
 
@@ -122,7 +121,7 @@ The `player` table (SQLite, same database as the scoreboard state) is a local ro
 
 - **`/players`** — a page (linked from the board's controls overlay) to add/edit/delete roster players by hand, with a photo upload.
 - **Assigning a roster player to the board** — press `P` (or use the "Choose Player" button per slot in the controls overlay) to open a picker dialog listing the roster; picking one links that slot to the player's `Id` (`ScoreboardState.Player1Id`/`Player2Id`). Once linked, the board displays that player's `Nickname` (falling back to `Name` if the nickname is empty) and their photo next to the name, instead of the free-typed `Player1Name`/`Player2Name`. "Use manual name instead" in the dialog unlinks it and reverts to the free-text name. Typing a number into the free-text name field is also treated as a lookup — if a roster player has that Id, that player is linked instead of using the digits as a literal name.
-- **`UpsertPlayer`** over WebSocket/Bluetooth (see above) adds/updates roster entries remotely — e.g. from the MAUI companion app.
+- **`UpsertPlayer`** over WebSocket (see above) adds/updates roster entries remotely — e.g. from the MAUI companion app.
 
 ## Match history
 
@@ -133,7 +132,7 @@ Ending a match is two separate steps, both in the controls overlay:
 
 View history at **`/matches`**, linked from the controls overlay, with the winner's name highlighted.
 
-Both are also `ScoreboardCommand`s (`EndGame`, `NewGame`), so either can be triggered remotely over WebSocket/Bluetooth as well as the on-screen buttons. Neither has a confirmation dialog — both fire immediately, locally or remotely.
+Both are also `ScoreboardCommand`s (`EndGame`, `NewGame`), so either can be triggered remotely over WebSocket as well as the on-screen buttons. Neither has a confirmation dialog — both fire immediately, locally or remotely.
 
 The match target itself (`Current.MatchTarget`, default 20 on a brand-new database) can be edited directly in the controls overlay, or set remotely with `SetMatchTarget` (see above).
 
@@ -178,4 +177,3 @@ The Client app logs via Serilog to both the console and a rolling daily file und
 - `Services/WebSocketService.cs` in the Client project is an older outbound `ClientWebSocket` stub, superseded by the inbound `/ws` endpoint + `ScoreboardCommandHub` design above; currently unused.
 - No formal EF Core migrations — schema changes are patched in at startup in `Program.cs` (`CREATE TABLE IF NOT EXISTS` / `EnsureColumn`) since `Database.EnsureCreated()` is a no-op once the db file exists. Fine for now, but if the schema keeps growing, switching to real migrations would remove the need for this pattern.
 - The `/ws` state broadcast (see "Remote control input" above) does **not** fire on the shot clock's per-tick countdown (every 100ms) — only on discrete state changes (a command applied, the clock naturally expiring, etc.), to avoid flooding connected clients. `shotClockRemaining` in the snapshot is accurate at the moment it's sent, but a control app won't see it counting down live between those discrete pushes, only jump when it starts/stops/resets/expires.
-- Bluetooth is receive-only from the board's perspective — the board (as BLE *central*) never opens a *write* channel back to the paired peripheral, so the state broadcast above only reaches WebSocket clients, not a connected Bluetooth remote. Would need a specific writable GATT characteristic on the remote's firmware to support that.
