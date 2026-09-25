@@ -96,6 +96,12 @@ public class RemoteWsPushService(
         var pending = await db.MatchResults.Where(m => !m.SyncedWS).ToListAsync(ct);
         foreach (var match in pending)
         {
+            var scoreDistribution = await db.MatchScoreStats
+                .Where(s => s.MatchResultId == match.Id)
+                .OrderBy(s => s.PlayerSlot).ThenBy(s => s.BucketIndex)
+                .Select(s => new { playerSlot = s.PlayerSlot, bucketIndex = s.BucketIndex, totalPoints = s.TotalPoints })
+                .ToListAsync(ct);
+
             var json = JsonSerializer.Serialize(new
             {
                 type = "matchResult",
@@ -114,7 +120,9 @@ public class RemoteWsPushService(
                     inning = match.Inning,
                     matchTarget = match.MatchTarget,
                     winner = match.Winner,
-                    playedAt = match.PlayedAt
+                    playedAt = match.PlayedAt,
+                    scoreDistributionBucketMinutes = 5,
+                    scoreDistribution
                 }
             }, _jsonOptions);
 
@@ -127,6 +135,9 @@ public class RemoteWsPushService(
         var finished = await db.MatchResults.Where(m => m.SyncedAPI && m.SyncedWS).ToListAsync(ct);
         if (finished.Count > 0)
         {
+            var finishedIds = finished.Select(m => m.Id).ToList();
+            var finishedStats = await db.MatchScoreStats.Where(s => finishedIds.Contains(s.MatchResultId)).ToListAsync(ct);
+            db.MatchScoreStats.RemoveRange(finishedStats);
             db.MatchResults.RemoveRange(finished);
             await db.SaveChangesAsync(ct);
         }
