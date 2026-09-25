@@ -8,6 +8,7 @@ public class RemoteSyncService(
     IHttpClientFactory httpClientFactory,
     IWebHostEnvironment env,
     IOptions<RemoteSyncOptions> options,
+    SystemPowerService systemPower,
     ILogger<RemoteSyncService> logger) : BackgroundService
 {
     private readonly RemoteSyncOptions _options = options.Value;
@@ -57,6 +58,11 @@ public class RemoteSyncService(
 
     private async Task SyncOnceAsync(HttpClient http, CancellationToken ct)
     {
+        if (systemPower.IsShuttingDown)
+        {
+            return;
+        }
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         await PushPlayersAsync(db, http, ct);

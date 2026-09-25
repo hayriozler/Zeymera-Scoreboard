@@ -6,6 +6,7 @@ namespace Zeymera.Scoreboard.Client.Services;
 public class RemoteWsPushService(
     IDbContextFactory<DataContext> dbFactory,
     ScoreboardCommandHub hub,
+    SystemPowerService systemPower,
     ILogger<RemoteWsPushService> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -35,7 +36,7 @@ public class RemoteWsPushService(
 
     private async Task PushOnceAsync(CancellationToken ct)
     {
-        if (!hub.HasActiveConnection)
+        if (!hub.HasActiveConnection || systemPower.IsShuttingDown)
         {
             return;
         }

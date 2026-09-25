@@ -7,6 +7,7 @@
 @inject DataContext DbContext
 @inject ScoreboardCommandHub Hub
 @inject IWebHostEnvironment Env
+@inject SystemPowerService SystemPower
 @using Zeymera.Scoreboard.Client.Models
 @using Zeymera.Scoreboard.Client.Services
 @using Microsoft.AspNetCore.Components.Web
@@ -14,7 +15,7 @@
 @using System.Text.Json
 @using System.Net.WebSockets
 
-<div @ref="board" class="board" tabindex="0" @onkeydown="HandleKeyDown" @onclick="RequestFullscreenAsync">
+<div @ref="board" class="board" tabindex="0" @onkeydown="HandleKeyDown" @onkeyup="HandleKeyUp" @onclick="RequestFullscreenAsync">
 
     <header class="board-header">
         <div class="header-brand">
@@ -744,6 +745,18 @@
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        SystemPower.NotifyKeyDown(e.Key);
+
+        if (SystemPower.IsShuttingDown)
+        {
+            return;
+        }
+
+        if (e.Key is "NumLock" or "Insert" or "Delete" && SystemPower.IsHeld("NumLock") && (SystemPower.IsHeld("Insert") || SystemPower.IsHeld("Delete")))
+        {
+            return;
+        }
+
         if (_gameEnded)
         {
             return;
@@ -792,6 +805,8 @@
             await ApplyCommandsAsync([new ScoreboardCommandMessage(command.Value)]);
         }
     }
+
+    private void HandleKeyUp(KeyboardEventArgs e) => SystemPower.NotifyKeyUp(e.Key);
 
     private void ApplyCommand(ScoreboardCommand command, JsonElement? payload = null)
     {
@@ -1019,7 +1034,7 @@
 
     private async Task ApplyCommandsAsync(IReadOnlyList<ScoreboardCommandMessage> messages, WebSocket? sender = null)
     {
-        if (messages.Count == 0)
+        if (messages.Count == 0 || SystemPower.IsShuttingDown)
         {
             return;
         }
@@ -1064,7 +1079,7 @@
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
             while (await timer.WaitForNextTickAsync(token))
             {
-                if (!Current.ShotClockActive) continue;
+                if (!Current.ShotClockActive || SystemPower.IsShuttingDown) continue;
 
                 Current.ShotClockRemaining = Math.Max(0, Current.ShotClockRemaining - 0.1);
                 if (Current.ShotClockRemaining <= 0)

@@ -60,6 +60,7 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseU
 builder.Services.AddScoped<LocalizationService>();
 builder.Services.AddSingleton<WebSocketService>();
 builder.Services.AddSingleton<ScoreboardCommandHub>();
+builder.Services.AddSingleton<SystemPowerService>();
 builder.Services.Configure<RemoteSyncOptions>(builder.Configuration.GetSection("RemoteSync"));
 builder.Services.AddHttpClient(nameof(RemoteSyncService));
 builder.Services.AddHostedService<RemoteSyncService>();

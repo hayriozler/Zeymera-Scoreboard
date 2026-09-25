@@ -36,6 +36,18 @@ Every shortcut also has a numpad-friendly alternate, so a bare numeric keypad (n
 
 The warm-up timer page (`/warmup/{minutes}`) has its own shortcuts: `T`/`3`/Page Down to pause/resume, `R`/`6`/Right Arrow to reset, `Enter` to restart, `C`/`Esc`/`9`/Page Up to return to the board.
 
+## System power (reboot/shutdown)
+
+Holding `NumLock` + `Insert` for 2 seconds reboots the machine the app is running on; holding `NumLock` + `Delete` for 2 seconds shuts it down. This is meant for a numpad-only remote (no letter keys), where `Insert`/`Delete` are what a numpad's `0`/`.` keys send while `NumLock` is off — the same reasoning behind the "NumLock-off equivalent" column above.
+
+`Services/SystemPowerService.cs` tracks held keys itself (`Home.razor`'s `HandleKeyDown`/`HandleKeyUp` just report every keydown/keyup to it) and starts a 2-second timer the moment both keys of a combo are down together, cancelling it if either is released early. Once the hold completes:
+
+1. `IsShuttingDown` is set, which makes `ApplyCommandsAsync` (so every keyboard *and* WebSocket command), the shot clock's tick, and `RemoteSyncService`/`RemotePullService`/`RemoteWsPushService`'s background ticks all become no-ops — nothing new gets written to the database from this point on.
+2. The SQLite WAL is checkpointed (`PRAGMA wal_checkpoint(TRUNCATE)`) and pooled connections are cleared, so the database file is in a clean, fully-flushed state before the machine actually goes down.
+3. `sudo systemctl reboot` or `sudo systemctl poweroff` is invoked. On anything other than Linux (e.g. running `dotnet run` on a Windows dev machine) this step is skipped — steps 1–2 still happen, so the behavior can be tested end-to-end without actually rebooting a Windows machine.
+
+Step 3 needs the app's service user to be able to run those two `systemctl` commands without a password prompt — see `deploy/pi/install-power-sudoers.sh` and "Raspberry Pi kiosk deployment" below. Without that one-time setup, `sudo` itself will fail (no TTY to prompt on) and the machine won't actually reboot/shut down — but steps 1–2 already happened by then, and the app process itself keeps running normally either way, since `Process.Start` here is fire-and-forget and never awaited.
+
 ## Remote control input
 
 The scoreboard accepts the same commands from two sources. Every one of them ends up calling `Home.razor`'s `ApplyCommandsAsync` with a list of one or more `ScoreboardCommandMessage`s — that's the *only* place that ever saves to the database or broadcasts, applying every command in the list first and persisting/broadcasting exactly once at the end, regardless of how many commands arrived together. The on-screen buttons dispatch through this same path too (via a small `DispatchAsync(command, payload)` helper) rather than mutating state directly, so a button click and a remote command behave identically.
@@ -185,3 +197,4 @@ The Client app logs via Serilog to both the console and a rolling daily file und
 - `Services/WebSocketService.cs` in the Client project is an older outbound `ClientWebSocket` stub, superseded by the inbound `/ws` endpoint + `ScoreboardCommandHub` design above; currently unused.
 - No formal EF Core migrations — schema changes are patched in at startup in `Program.cs` (`CREATE TABLE IF NOT EXISTS` / `EnsureColumn`) since `Database.EnsureCreated()` is a no-op once the db file exists. Fine for now, but if the schema keeps growing, switching to real migrations would remove the need for this pattern.
 - The `/ws` state broadcast (see "Remote control input" above) does **not** fire on the shot clock's per-tick countdown (every 100ms) — only on discrete state changes (a command applied, the clock naturally expiring, etc.), to avoid flooding connected clients. `shotClockRemaining` in the snapshot is accurate at the moment it's sent, but a control app won't see it counting down live between those discrete pushes, only jump when it starts/stops/resets/expires.
+- `SystemPowerService.IsShuttingDown` (see "System power" above) never gets reset once set — if the `sudo systemctl reboot`/`poweroff` call fails (e.g. the sudoers rule from `deploy/pi/install-power-sudoers.sh` was never installed), the board is left permanently ignoring every command, keyboard and WebSocket alike, with no recovery except restarting the app process. There's no timeout/rollback if the actual OS-level reboot doesn't happen.

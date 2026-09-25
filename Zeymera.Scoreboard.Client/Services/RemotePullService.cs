@@ -10,6 +10,7 @@ public class RemotePullService(
     IDbContextFactory<DataContext> dbFactory,
     IHttpClientFactory httpClientFactory,
     IOptions<RemoteSyncOptions> options,
+    SystemPowerService systemPower,
     ILogger<RemotePullService> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -62,6 +63,11 @@ public class RemotePullService(
 
     private async Task PullOnceAsync(HttpClient http, CancellationToken ct)
     {
+        if (systemPower.IsShuttingDown)
+        {
+            return;
+        }
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         await PullPlayersAsync(db, http, ct);

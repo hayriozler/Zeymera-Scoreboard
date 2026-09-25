@@ -50,7 +50,19 @@ create a default `pi` account).
    ssh admin@scoreboard 'chmod +x /home/admin/zeymera-scoreboard/launch-kiosk.sh && cd /home/admin/zeymera-scoreboard && bash setup-autostart.sh'
    ```
 
-6. **Reboot** and confirm Chromium comes up in kiosk mode on its own:
+6. **Allow the app to reboot/shut down the Pi** (see "System power" in the main README) —
+   lets it run `sudo systemctl reboot`/`poweroff` without a password prompt when the
+   NumLock+Insert / NumLock+Delete keyboard hold fires:
+   ```bash
+   scp deploy/pi/install-power-sudoers.sh admin@scoreboard:~/
+   ssh admin@scoreboard 'bash install-power-sudoers.sh'
+   ```
+   Optional — skip it if you don't want the board able to reboot/shut down the Pi itself.
+   Without it, the hold gesture still stops all board activity and checkpoints the
+   database, it just can't carry out the actual reboot/shutdown (see "Known gaps" in the
+   main README for what that leaves the board in).
+
+7. **Reboot** and confirm Chromium comes up in kiosk mode on its own:
    ```bash
    ssh admin@scoreboard 'sudo reboot'
    ```
@@ -100,6 +112,7 @@ rm -f ~/.config/chromium/Singleton*
 | `install-dotnet.sh` | Pi, once | Installs the ASP.NET Core runtime to `~/.dotnet` |
 | `zeymera-scoreboard.service` | Pi, once | systemd unit — runs the app, `Restart=always` |
 | `install-kiosk-deps.sh` | Pi, once | apt-installs `unclutter`, `wmctrl`, `xset`, Chromium — everything `launch-kiosk.sh` needs |
+| `install-power-sudoers.sh` | Pi, once | NOPASSWD sudoers rule so the app can run `systemctl reboot`/`poweroff` itself |
 | `launch-kiosk.sh` | Pi, every boot (via autostart) | Waits for the app, then launches Chromium in kiosk mode |
 | `setup-autostart.sh` | Pi, once | Wires `launch-kiosk.sh` into `/etc/xdg/labwc/autostart` |
 | `publish-and-deploy.ps1` | Windows, every redeploy | Publish → strip local data → scp → restart service |
