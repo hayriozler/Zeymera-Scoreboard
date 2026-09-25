@@ -9,6 +9,8 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
     public DbSet<Player> Players { get; set; }
     public DbSet<MatchResult> MatchResults { get; set; }
     public DbSet<Team> Teams { get; set; }
+    public DbSet<ScoreEvent> ScoreEvents { get; set; }
+    public DbSet<MatchScoreStat> MatchScoreStats { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
 
@@ -27,5 +29,13 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
         modelBuilder.Entity<MatchResult>().HasKey(m => m.Id);
         modelBuilder.Entity<MatchResult>().Property(m => m.Id).UseAutoincrement();
         modelBuilder.Entity<MatchResult>().ToTable("match_result");
+
+        modelBuilder.Entity<ScoreEvent>().HasKey(e => e.Id);
+        modelBuilder.Entity<ScoreEvent>().Property(e => e.Id).UseAutoincrement();
+        modelBuilder.Entity<ScoreEvent>().ToTable("score_event");
+
+        modelBuilder.Entity<MatchScoreStat>().HasKey(s => s.Id);
+        modelBuilder.Entity<MatchScoreStat>().Property(s => s.Id).UseAutoincrement();
+        modelBuilder.Entity<MatchScoreStat>().ToTable("match_score_stat");
     }
 }

@@ -48,7 +48,7 @@
                 {
                     <img class="player-photo" src="@GetPhotoPath(1)" alt="" />
                 }
-                else if (GetAvatarDataUri(1) is { } avatar1)
+                @if (GetAvatarDataUri(1) is { } avatar1)
                 {
                     <img class="player-photo" src="@avatar1" alt="" />
                 }
@@ -95,7 +95,7 @@
                 {
                     <img class="player-photo" src="@GetPhotoPath(2)" alt="" />
                 }
-                else if (GetAvatarDataUri(2) is { } avatar2)
+                @if (GetAvatarDataUri(2) is { } avatar2)
                 {
                     <img class="player-photo" src="@avatar2" alt="" />
                 }
@@ -477,6 +477,58 @@
         SelectRosterPlayer(slot, player.Id);
     }
 
+    private void DeletePlayerFromRemotePayload(JsonElement? payload)
+    {
+        if (GetIntPayload(payload) is not int remoteId)
+        {
+            return;
+        }
+
+        var player = DbContext.Players.FirstOrDefault(p => p.RemoteId == remoteId);
+        if (player is null)
+        {
+            return;
+        }
+
+        if (Current.Player1Id == player.Id) Current.Player1Id = null;
+        if (Current.Player2Id == player.Id) Current.Player2Id = null;
+
+        if (!string.IsNullOrEmpty(player.PhotoPath))
+        {
+            var fullPath = Path.Combine(Env.WebRootPath, player.PhotoPath);
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+            }
+        }
+
+        DbContext.Players.Remove(player);
+        ResolvePlayers();
+    }
+
+    private void DeleteTeamFromRemotePayload(JsonElement? payload)
+    {
+        if (GetIntPayload(payload) is not int remoteId)
+        {
+            return;
+        }
+
+        var team = DbContext.Teams.FirstOrDefault(t => t.RemoteId == remoteId);
+        if (team is null)
+        {
+            return;
+        }
+
+        var members = DbContext.Players.Where(p => p.TeamId == team.Id).ToList();
+        foreach (var member in members)
+        {
+            member.TeamId = null;
+        }
+
+        DbContext.Teams.Remove(team);
+        ResolvePlayers();
+    }
+
     private void SelectRosterPlayer(int slot, int playerId)
     {
         if (slot == 1) Current.Player1Id = playerId; else Current.Player2Id = playerId;
@@ -587,6 +639,7 @@
     private void CommitCurrentPoints()
     {
         var points = Current.CurrentPoints;
+        var scoringSlot = Current.ActivePlayer;
 
         if (Current.ActivePlayer == 1)
         {
@@ -604,9 +657,19 @@
 
         Current.CurrentPoints = 0;
         RecalculateAverages();
+
+        DbContext.ScoreEvents.Add(new ScoreEvent
+        {
+            Timestamp = DateTime.Now,
+            PlayerSlot = scoringSlot,
+            Points = points
+        });
     }
 
     private bool _gameEnded;
+    private DateTime _gameStartedAt = DateTime.Now;
+
+    private const int ScoreStatBucketMinutes = 5;
 
     private void EndGame()
     {
@@ -619,7 +682,7 @@
             : Current.Player2Score > Current.Player1Score ? 2
             : 0;
 
-        DbContext.MatchResults.Add(new MatchResult
+        var matchResult = new MatchResult
         {
             PlayedAt = DateTime.Now,
             Player1Id = Current.Player1Id,
@@ -635,7 +698,22 @@
             Inning = Current.Inning,
             MatchTarget = Current.MatchTarget,
             Winner = winner
-        });
+        };
+        DbContext.MatchResults.Add(matchResult);
+        DbContext.SaveChanges();
+
+        var events = DbContext.ScoreEvents.ToList();
+        var buckets = events
+            .GroupBy(e => (PlayerSlot: e.PlayerSlot, BucketIndex: (int)((e.Timestamp - _gameStartedAt).TotalMinutes / ScoreStatBucketMinutes)))
+            .Select(g => new MatchScoreStat
+            {
+                MatchResultId = matchResult.Id,
+                PlayerSlot = g.Key.PlayerSlot,
+                BucketIndex = Math.Max(0, g.Key.BucketIndex),
+                TotalPoints = g.Sum(e => e.Points)
+            });
+        DbContext.MatchScoreStats.AddRange(buckets);
+        DbContext.ScoreEvents.RemoveRange(events);
 
         Current.ShotClockActive = false;
         _gameEnded = true;
@@ -644,6 +722,7 @@
     private void NewGame()
     {
         _gameEnded = false;
+        _gameStartedAt = DateTime.Now;
         Current.Player1Score = 0;
         Current.Player2Score = 0;
         Current.Player1Avg = 0;
@@ -805,6 +884,12 @@
                 break;
             case ScoreboardCommand.SetPlayer2:
                 SetPlayerFromRemotePayload(2, payload);
+                break;
+            case ScoreboardCommand.DeletePlayer:
+                DeletePlayerFromRemotePayload(payload);
+                break;
+            case ScoreboardCommand.DeleteTeam:
+                DeleteTeamFromRemotePayload(payload);
                 break;
         }
     }

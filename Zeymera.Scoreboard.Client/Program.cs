@@ -148,6 +148,25 @@ using (var scope = app.Services.CreateScope())
         );
         """);
 
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS score_event (
+            Id INTEGER PRIMARY KEY,
+            Timestamp TEXT NOT NULL,
+            PlayerSlot INTEGER NOT NULL,
+            Points INTEGER NOT NULL
+        );
+        """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS match_score_stat (
+            Id INTEGER PRIMARY KEY,
+            MatchResultId INTEGER NOT NULL,
+            PlayerSlot INTEGER NOT NULL,
+            BucketIndex INTEGER NOT NULL,
+            TotalPoints INTEGER NOT NULL
+        );
+        """);
+
 }
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

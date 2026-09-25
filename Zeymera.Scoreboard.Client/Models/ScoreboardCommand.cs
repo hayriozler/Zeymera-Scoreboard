@@ -27,11 +27,13 @@ public enum ScoreboardCommand
     AddTeam,
     SetPlayer1,
     SetPlayer2,
+    DeletePlayer,
+    DeleteTeam,
 }
 
 public static class ScoreboardCommandReplyPolicy
 {
-    private static readonly HashSet<ScoreboardCommand> ExcludeSenderFromBroadcast =
+    private static readonly HashSet<ScoreboardCommand> _excludeSenderFromBroadcast =
     [
         ScoreboardCommand.IncrementPoints,
         ScoreboardCommand.DecrementPoints,
@@ -39,7 +41,9 @@ public static class ScoreboardCommandReplyPolicy
         ScoreboardCommand.AddTeam,
         ScoreboardCommand.SetPlayer1,
         ScoreboardCommand.SetPlayer2,
+        ScoreboardCommand.DeletePlayer,
+        ScoreboardCommand.DeleteTeam,
     ];
 
-    public static bool ExcludesSender(ScoreboardCommand command) => ExcludeSenderFromBroadcast.Contains(command);
+    public static bool ExcludesSender(ScoreboardCommand command) => _excludeSenderFromBroadcast.Contains(command);
 }
