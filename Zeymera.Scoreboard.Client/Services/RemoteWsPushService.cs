@@ -132,7 +132,7 @@ public class RemoteWsPushService(
             await db.SaveChangesAsync(ct);
         }
 
-        var finished = await db.MatchResults.Where(m => m.SyncedAPI && m.SyncedWS).ToListAsync(ct);
+        var finished = await db.MatchResults.Where(m => m.SyncedWS).ToListAsync(ct);
         if (finished.Count > 0)
         {
             var finishedIds = finished.Select(m => m.Id).ToList();

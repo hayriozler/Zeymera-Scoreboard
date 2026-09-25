@@ -178,12 +178,15 @@ public class RemoteSyncService(
 
     private static async Task CleanupSyncedMatchesAsync(DataContext db, CancellationToken ct)
     {
-        var finished = await db.MatchResults.Where(m => m.SyncedAPI && m.SyncedWS).ToListAsync(ct);
+        var finished = await db.MatchResults.Where(m => m.SyncedWS).ToListAsync(ct);
         if (finished.Count == 0)
         {
             return;
         }
 
+        var finishedIds = finished.Select(m => m.Id).ToList();
+        var finishedStats = await db.MatchScoreStats.Where(s => finishedIds.Contains(s.MatchResultId)).ToListAsync(ct);
+        db.MatchScoreStats.RemoveRange(finishedStats);
         db.MatchResults.RemoveRange(finished);
         await db.SaveChangesAsync(ct);
     }
