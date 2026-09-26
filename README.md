@@ -36,11 +36,15 @@ Every shortcut also has a numpad-friendly alternate, so a bare numeric keypad (n
 
 The warm-up timer page (`/warmup/{minutes}`) has its own shortcuts: `T`/`3`/Page Down to pause/resume, `R`/`6`/Right Arrow to reset, `Enter` to restart, `C`/`Esc`/`9`/Page Up to return to the board.
 
+There's also a hold gesture, not a tap: `NumLock` + `Insert`/`Delete`, held together for 4 seconds, reboots or shuts down the machine — see "System power" below.
+
 ## System power (reboot/shutdown)
 
-Holding `NumLock` + `Insert` for 2 seconds reboots the machine the app is running on; holding `NumLock` + `Delete` for 2 seconds shuts it down. This is meant for a numpad-only remote (no letter keys), where `Insert`/`Delete` are what a numpad's `0`/`.` keys send while `NumLock` is off — the same reasoning behind the "NumLock-off equivalent" column above.
+Holding `NumLock` + `Insert` for 4 seconds reboots the machine the app is running on; holding `NumLock` + `Delete` for 4 seconds shuts it down. This is meant for a numpad-only remote (no letter keys), where `Insert`/`Delete` are what a numpad's `0`/`.` keys send while `NumLock` is off — the same reasoning behind the "NumLock-off equivalent" column above. `NumLock` itself is only ever app-relevant here — no other shortcut checks its state, `SystemPowerService`'s `IsHeld("NumLock")` is only ever paired with `Insert`/`Delete`.
 
-`Services/SystemPowerService.cs` tracks held keys itself (`Home.razor`'s `HandleKeyDown`/`HandleKeyUp` just report every keydown/keyup to it) and starts a 2-second timer the moment both keys of a combo are down together, cancelling it if either is released early. Once the hold completes:
+Pressing the physical `NumLock` key toggles its on/off state at the OS level, outside the app's control — so starting this gesture (even one released well before 4 seconds) flips what every other numpad shortcut sends for the rest of the session (the "NumLock-off equivalent" column above only applies in one of the two states). If the numpad-driven remote starts responding to the wrong keys after someone reaches for `Insert`/`Delete`, that's why — toggle `NumLock` back (or just retrain the remote/board on the new state) rather than treating it as a bug.
+
+`Services/SystemPowerService.cs` tracks held keys itself (`Home.razor`'s `HandleKeyDown`/`HandleKeyUp` just report every keydown/keyup to it) and starts a 4-second timer the moment both keys of a combo are down together, cancelling it if either is released early. Once the hold completes:
 
 1. `IsShuttingDown` is set, which makes `ApplyCommandsAsync` (so every keyboard *and* WebSocket command), the shot clock's tick, and `RemoteSyncService`/`RemotePullService`/`RemoteWsPushService`'s background ticks all become no-ops — nothing new gets written to the database from this point on.
 2. The SQLite WAL is checkpointed (`PRAGMA wal_checkpoint(TRUNCATE)`) and pooled connections are cleared, so the database file is in a clean, fully-flushed state before the machine actually goes down.

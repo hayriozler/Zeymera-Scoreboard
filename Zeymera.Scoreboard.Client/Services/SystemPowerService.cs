@@ -6,7 +6,7 @@ namespace Zeymera.Scoreboard.Client.Services;
 
 public class SystemPowerService(IDbContextFactory<DataContext> dbFactory, ILogger<SystemPowerService> logger)
 {
-    public const int HoldMilliseconds = 2000;
+    public const int HoldMilliseconds = 4000;
 
     private readonly HashSet<string> _heldKeys = [];
     private CancellationTokenSource? _holdCts;

@@ -61,6 +61,7 @@ builder.Services.AddScoped<LocalizationService>();
 builder.Services.AddSingleton<WebSocketService>();
 builder.Services.AddSingleton<ScoreboardCommandHub>();
 builder.Services.AddSingleton<SystemPowerService>();
+builder.Services.AddSingleton<BoardSessionGuard>();
 builder.Services.Configure<RemoteSyncOptions>(builder.Configuration.GetSection("RemoteSync"));
 builder.Services.AddHttpClient(nameof(RemoteSyncService));
 builder.Services.AddHostedService<RemoteSyncService>();
@@ -169,6 +170,7 @@ using (var scope = app.Services.CreateScope())
         """);
 
 }
+app.UseStaticFiles();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

@@ -8,6 +8,7 @@
 @inject ScoreboardCommandHub Hub
 @inject IWebHostEnvironment Env
 @inject SystemPowerService SystemPower
+@inject BoardSessionGuard BoardSession
 @using Zeymera.Scoreboard.Client.Models
 @using Zeymera.Scoreboard.Client.Services
 @using Microsoft.AspNetCore.Components.Web
@@ -15,6 +16,14 @@
 @using System.Text.Json
 @using System.Net.WebSockets
 
+@if (_boardOccupiedElsewhere)
+{
+    <div class="board-occupied">
+        <div class="board-occupied-message">@L.T("BoardOccupiedElsewhere")</div>
+    </div>
+}
+else
+{
 <div @ref="board" class="board" tabindex="0" @onkeydown="HandleKeyDown" @onkeyup="HandleKeyUp" @onclick="RequestFullscreenAsync">
 
     <header class="board-header">
@@ -41,23 +50,25 @@
     <main class="scores">
         <section class="player-panel @(Current.ActivePlayer == 1 ? "active-white" : "")">
             <div class="player-name-bar">
-                @if (Current.ActivePlayer == 1)
-                {
-                    <span class="ball white turn-ball" aria-hidden="true"></span>
-                }
-                @if (!string.IsNullOrEmpty(GetPhotoPath(1)))
-                {
-                    <img class="player-photo" src="@GetPhotoPath(1)" alt="" />
-                }
-                <span>@GetHeaderLabel(1)</span>
-                @if (GetAvatarDataUri(1) is { } avatar1)
-                {
-                    <img class="player-photo" src="@avatar1" alt="" />
-                }
-                else
-                {
-                    <div class="player-avatar-fallback" style="background:@GetAvatarColor(1)">@GetAvatarInitials(1)</div>
-                }
+                <div class="player-name-content">
+                    @if (Current.ActivePlayer == 1)
+                    {
+                        <span class="ball white turn-ball" aria-hidden="true"></span>
+                    }
+                    @if (!string.IsNullOrEmpty(GetPhotoPath(1)))
+                    {
+                        <img class="player-photo" src="@GetPhotoPath(1)" alt="" />
+                    }
+                    <span>@GetHeaderLabel(1)</span>
+                    @if (GetAvatarDataUri(1) is { } avatar1)
+                    {
+                        <img class="player-photo" src="@avatar1" alt="" />
+                    }
+                    else
+                    {
+                        <div class="player-avatar-fallback" style="background:@GetAvatarColor(1)">@GetAvatarInitials(1)</div>
+                    }
+                </div>
                 @if (Current.ActivePlayer == 1)
                 {
                     <span class="current-points-badge">@Current.CurrentPoints</span>
@@ -88,23 +99,25 @@
 
         <section class="player-panel @(Current.ActivePlayer == 2 ? "active-yellow" : "")">
             <div class="player-name-bar">
-                @if (Current.ActivePlayer == 2)
-                {
-                    <span class="ball yellow turn-ball" aria-hidden="true"></span>
-                }
-                @if (!string.IsNullOrEmpty(GetPhotoPath(2)))
-                {
-                    <img class="player-photo" src="@GetPhotoPath(2)" alt="" />
-                }
-                <span>@GetHeaderLabel(2)</span>
-                @if (GetAvatarDataUri(2) is { } avatar2)
-                {
-                    <img class="player-photo" src="@avatar2" alt="" />
-                }
-                else
-                {
-                    <div class="player-avatar-fallback" style="background:@GetAvatarColor(2)">@GetAvatarInitials(2)</div>
-                }
+                <div class="player-name-content">
+                    @if (Current.ActivePlayer == 2)
+                    {
+                        <span class="ball yellow turn-ball" aria-hidden="true"></span>
+                    }
+                    @if (!string.IsNullOrEmpty(GetPhotoPath(2)))
+                    {
+                        <img class="player-photo" src="@GetPhotoPath(2)" alt="" />
+                    }
+                    <span>@GetHeaderLabel(2)</span>
+                    @if (GetAvatarDataUri(2) is { } avatar2)
+                    {
+                        <img class="player-photo" src="@avatar2" alt="" />
+                    }
+                    else
+                    {
+                        <div class="player-avatar-fallback" style="background:@GetAvatarColor(2)">@GetAvatarInitials(2)</div>
+                    }
+                </div>
                 @if (Current.ActivePlayer == 2)
                 {
                     <span class="current-points-badge">@Current.CurrentPoints</span>
@@ -296,6 +309,7 @@
         </div>
     }
 </div>
+}
 
 @code {
     private bool IsOnline = false;
@@ -316,14 +330,23 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && !_boardOccupiedElsewhere)
         {
             await board.FocusAsync();
         }
     }
 
+    private bool _boardOccupiedElsewhere;
+    private Guid _sessionId;
+
     protected override async Task OnInitializedAsync()
     {
+        if (!BoardSession.TryAcquire(out _sessionId))
+        {
+            _boardOccupiedElsewhere = true;
+            return;
+        }
+
         L.SetLanguage(GetQueryParam(Nav.Uri, "lang"));
         L.LanguageChanged += Adjust;
         Hub.CommandReceived += OnRemoteCommand;
@@ -1099,6 +1122,12 @@
 
     public async ValueTask DisposeAsync()
     {
+        BoardSession.Release(_sessionId);
+        if (_boardOccupiedElsewhere)
+        {
+            return;
+        }
+
         L.LanguageChanged -= Adjust;
         Hub.CommandReceived -= OnRemoteCommand;
         Hub.ConnectionChanged -= OnHubConnectionChanged;

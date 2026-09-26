@@ -20,7 +20,7 @@ create a default `pi` account).
    framework-dependent, no SDK needed on the Pi):
    ```bash
    scp deploy/pi/install-dotnet.sh admin@scoreboard:~/
-   ssh admin@scoreboard 'bash install-dotnet.sh'
+   ssh admin@scoreboard 'chmod +x install-dotnet.sh && ./install-dotnet.sh'
    ```
 
 2. **First publish + copy** (see "Redeploying" below — same script, just run it once now):
@@ -33,21 +33,30 @@ create a default `pi` account).
 3. **Install the systemd service**:
    ```bash
    scp deploy/pi/zeymera-scoreboard.service admin@scoreboard:~/
-   ssh admin@scoreboard 'sudo cp ~/zeymera-scoreboard.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now zeymera-scoreboard.service'
+   ssh -t admin@scoreboard 'sudo cp ~/zeymera-scoreboard.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now zeymera-scoreboard.service'
    ```
    Verify it's up: `ssh admin@scoreboard 'curl -sSf http://localhost:5288/ > /dev/null && echo OK'`
+
+   Then let `publish-and-deploy.ps1` restart this service over a non-interactive SSH call
+   without a password prompt on every future redeploy:
+   ```bash
+   scp deploy/pi/install-deploy-sudoers.sh admin@scoreboard:~/
+   ssh -t admin@scoreboard 'chmod +x install-deploy-sudoers.sh && ./install-deploy-sudoers.sh'
+   ```
+   Skip this and every redeploy's restart step will fail with `sudo: a password is
+   required` (see "Redeploying" below) — you'd have to restart the service by hand instead.
 
 4. **Install the kiosk's apt dependencies** (`unclutter`, `wmctrl`, `xset`, Chromium — see
    `install-kiosk-deps.sh` for why each is needed):
    ```bash
    scp deploy/pi/install-kiosk-deps.sh admin@scoreboard:~/
-   ssh admin@scoreboard 'bash install-kiosk-deps.sh'
+   ssh -t admin@scoreboard 'chmod +x install-kiosk-deps.sh && ./install-kiosk-deps.sh'
    ```
 
 5. **Install the kiosk launcher and wire up autostart**:
    ```bash
    scp deploy/pi/launch-kiosk.sh deploy/pi/setup-autostart.sh admin@scoreboard:/home/admin/zeymera-scoreboard/
-   ssh admin@scoreboard 'chmod +x /home/admin/zeymera-scoreboard/launch-kiosk.sh && cd /home/admin/zeymera-scoreboard && bash setup-autostart.sh'
+   ssh -t admin@scoreboard 'chmod +x /home/admin/zeymera-scoreboard/launch-kiosk.sh && cd /home/admin/zeymera-scoreboard && bash setup-autostart.sh'
    ```
 
 6. **Allow the app to reboot/shut down the Pi** (see "System power" in the main README) —
@@ -55,7 +64,7 @@ create a default `pi` account).
    NumLock+Insert / NumLock+Delete keyboard hold fires:
    ```bash
    scp deploy/pi/install-power-sudoers.sh admin@scoreboard:~/
-   ssh admin@scoreboard 'bash install-power-sudoers.sh'
+   ssh -t admin@scoreboard 'chmod +x install-power-sudoers.sh && ./install-power-sudoers.sh'
    ```
    Optional — skip it if you don't want the board able to reboot/shut down the Pi itself.
    Without it, the hold gesture still stops all board activity and checkpoints the
@@ -64,7 +73,7 @@ create a default `pi` account).
 
 7. **Reboot** and confirm Chromium comes up in kiosk mode on its own:
    ```bash
-   ssh admin@scoreboard 'sudo reboot'
+   ssh -t admin@scoreboard 'sudo reboot'
    ```
    If it doesn't, check `~/kiosk-autostart.log` on the Pi first — boot-time autostart
    failures are otherwise invisible (no attached terminal).
@@ -79,6 +88,13 @@ This publishes, strips `wwwroot/Db`/`wwwroot/Players` from the output (so it can
 overwrite the Pi's live database or uploaded player photos), copies the result over, and
 restarts the service. `launch-kiosk.sh`/`setup-autostart.sh`/the service file only need to
 be re-copied if you actually change them — routine app redeploys don't touch those.
+
+The restart step needs `install-deploy-sudoers.sh` installed (step 3 above) — without it,
+`sudo systemctl restart zeymera-scoreboard.service` has no TTY to prompt for a password on
+and fails with `sudo: a password is required`, and the script throws `ssh restart failed`.
+The publish/copy still succeeded at that point; you'd just need to restart the service by
+hand (`ssh -t admin@scoreboard 'sudo systemctl restart zeymera-scoreboard.service'`, entering
+the password when prompted) until that sudoers rule is installed.
 
 ## Logs
 
@@ -113,6 +129,7 @@ rm -f ~/.config/chromium/Singleton*
 | `zeymera-scoreboard.service` | Pi, once | systemd unit — runs the app, `Restart=always` |
 | `install-kiosk-deps.sh` | Pi, once | apt-installs `unclutter`, `wmctrl`, `xset`, Chromium — everything `launch-kiosk.sh` needs |
 | `install-power-sudoers.sh` | Pi, once | NOPASSWD sudoers rule so the app can run `systemctl reboot`/`poweroff` itself |
+| `install-deploy-sudoers.sh` | Pi, once | NOPASSWD sudoers rule so `publish-and-deploy.ps1` can restart the service over SSH |
 | `launch-kiosk.sh` | Pi, every boot (via autostart) | Waits for the app, then launches Chromium in kiosk mode |
 | `setup-autostart.sh` | Pi, once | Wires `launch-kiosk.sh` into `/etc/xdg/labwc/autostart` |
 | `publish-and-deploy.ps1` | Windows, every redeploy | Publish → strip local data → scp → restart service |

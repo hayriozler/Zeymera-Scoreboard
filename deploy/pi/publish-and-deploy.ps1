@@ -49,8 +49,13 @@ Write-Host "Copying to ${PiUser}@${PiHost}:${RemoteAppDir} ..."
 & scp -r "$publishDir\*" "${PiUser}@${PiHost}:${RemoteAppDir}/"
 if ($LASTEXITCODE -ne 0) { throw "scp failed" }
 
-Write-Host "Restarting service ..."
-& ssh "${PiUser}@${PiHost}" "sudo systemctl restart zeymera-scoreboard.service"
-if ($LASTEXITCODE -ne 0) { throw "ssh restart failed" }
+$serviceInstalled = & ssh "${PiUser}@${PiHost}" "systemctl list-unit-files zeymera-scoreboard.service 2>/dev/null | grep -q zeymera-scoreboard.service && echo yes || echo no"
+if ($serviceInstalled -eq "yes") {
+    Write-Host "Restarting service ..."
+    & ssh "${PiUser}@${PiHost}" "sudo systemctl restart zeymera-scoreboard.service"
+    if ($LASTEXITCODE -ne 0) { throw "ssh restart failed" }
+} else {
+    Write-Host "Service not installed yet - skipping restart (see deploy/pi/README.md step 3)."
+}
 
 Write-Host "Done."
